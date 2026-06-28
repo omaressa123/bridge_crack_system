@@ -49,12 +49,52 @@ Bilingual (Arabic/English) mobile application for real-time bridge infrastructur
 - Node.js 16+ (download from https://nodejs.org/)
 - npm or yarn package manager
 - Modern web browser (Chrome, Firefox, Safari, Edge)
+- Python 3.8+ for backend
+- MySQL database for backend
 
 ### Installation
 
-1. **Navigate to project directory**
+#### Backend Setup
+1. **Navigate to backend directory**
 ```bash
-cd bridge-crack-app
+cd backend
+```
+
+2. **Create a virtual environment (optional but recommended)**
+```bash
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On Linux/Mac:
+source venv/bin/activate
+```
+
+3. **Install dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+4. **Create .env file**
+```bash
+cp .env.example .env
+```
+Then edit the .env file with your MySQL credentials.
+
+5. **Initialize database (optional: add mock data)**
+```bash
+python init_db.py
+```
+
+6. **Start backend server**
+```bash
+python main.py
+```
+Backend will be available at `http://localhost:8000`
+
+#### Frontend Setup
+1. **Navigate to project root directory**
+```bash
+cd ..
 ```
 
 2. **Install dependencies**
@@ -66,7 +106,6 @@ npm install
 ```bash
 npm run dev
 ```
-
 The app will open automatically at `http://localhost:5173`
 
 ---
@@ -76,57 +115,54 @@ The app will open automatically at `http://localhost:5173`
 ```
 bridge-crack-app/
 ├── components/
-│   ├── Header.jsx              # App header with language toggle
+│   ├── Header.jsx              # App header with language toggle and bridge selector
 │   ├── Navigation.jsx          # Bottom navigation tabs
 │   ├── Dashboard.jsx           # Overview and status
 │   ├── CrackDetection.jsx      # Photo upload & detection
 │   ├── SensorMonitor.jsx       # Real-time sensor data
 │   └── InspectionReport.jsx    # Report management
+├── backend/
+│   ├── main.py                 # FastAPI main backend app
+│   ├── models.py               # SQLAlchemy models
+│   ├── init_db.py              # Database initialization with mock data
+│   ├── requirements.txt        # Python dependencies
+│   ├── rdd.yaml                # YOLO model configuration
+│   └── .env.example            # Environment variables template
+├── yolo_model/                 # YOLO model weights
+│   ├── best1.pt                # Best trained model
+│   ├── last.pt                 # Last checkpoint
+│   └── results 2.png           # Training results
 ├── App.jsx                     # Main app component
 ├── App.css                     # Global styles (fully styled)
 ├── main.jsx                    # React entry point
 ├── index.html                  # HTML template
 ├── vite.config.js              # Vite configuration
-└── package.json                # Dependencies
-
+├── package.json                # Dependencies
+└── .gitignore                  # Git ignore file
 ```
 
 ---
 
 ## 🔧 Configuration
 
-### WebSocket Connection
-Edit the WebSocket URL in `App.jsx` (line ~26):
+### API_URL Configuration
+All frontend components use an API_URL constant. You can change it in each component or make a global config file.
 
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws');
-// Change 'localhost:8000' to your Raspberry Pi IP:PORT
-// Example: ws://192.168.1.100:8000/ws
+### Environment Variables for Backend
+Create a .env file in backend/ directory:
 ```
-
-### API Endpoints
-Update API calls in components to match your backend:
-
-**In CrackDetection.jsx:**
-```javascript
-// Replace with your actual backend URL
-const response = await fetch('http://your-rpi-ip:8000/detect', {
-  method: 'POST',
-  body: formData
-});
-```
-
-**In SensorMonitor.jsx:**
-```javascript
-// Fetch sensor data from your backend
-const data = await fetch('http://your-rpi-ip:8000/sensors/data?bridge_id=1');
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=bridge_crack_db
 ```
 
 ---
 
 ## 💻 Development
 
-### Available Scripts
+### Available Scripts (Frontend)
 
 ```bash
 # Start development server
@@ -140,30 +176,6 @@ npm run preview
 
 # Lint code (setup eslint first)
 npm run lint
-```
-
-### File Structure for New Components
-
-```jsx
-// Template for new components
-import React, { useState, useEffect } from 'react';
-
-export default function NewComponent({ language, t, bridgeId }) {
-  const [data, setData] = useState(null);
-
-  const translations = {
-    en: { /* English translations */ },
-    ar: { /* Arabic translations */ }
-  };
-
-  const trans = translations[language];
-
-  return (
-    <div className="new-component">
-      {/* Your JSX here */}
-    </div>
-  );
-}
 ```
 
 ---
@@ -187,13 +199,6 @@ All colors and spacing use CSS variables defined in `App.css`:
 }
 ```
 
-### Responsive Design
-- **Mobile**: < 480px
-- **Tablet**: 480px - 768px
-- **Desktop**: > 768px
-
-All components are fully responsive with media queries in `App.css`.
-
 ---
 
 ## 🌐 Bilingual Implementation
@@ -207,267 +212,21 @@ const [language, setLanguage] = useState('en'); // 'en' or 'ar'
 <ChildComponent language={language} t={translations[language]} />
 ```
 
-### RTL Support
-```css
-.app.rtl {
-  direction: rtl;
-  text-align: right;
-}
-
-.app.ltr {
-  direction: ltr;
-  text-align: left;
-}
-```
-
-### Translation Object Format
-```javascript
-const translations = {
-  en: {
-    key: 'English text',
-    anotherKey: 'More text',
-  },
-  ar: {
-    key: 'النص العربي',
-    anotherKey: 'المزيد من النص',
-  }
-};
-```
-
 ---
 
-## 📱 Mobile Optimization
+##  Deployment
 
-### Viewport Meta Tag
-Already set in `index.html`:
-```html
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-```
-
-### Touch-Friendly Design
-- Buttons: 44px+ tap targets
-- Spacing: 10-20px gaps
-- Font sizes: 14px+ for readability
-
-### PWA Features (Optional Setup)
-To make it installable on mobile:
-
-1. Add `manifest.json`:
-```json
-{
-  "name": "Bridge Crack Detection",
-  "short_name": "Bridge Cracks",
-  "icons": [...],
-  "theme_color": "#1F4E78",
-  "background_color": "#ffffff",
-  "display": "standalone"
-}
-```
-
-2. Reference in `index.html`:
-```html
-<link rel="manifest" href="/manifest.json">
-```
-
----
-
-## 🔌 Backend Integration
-
-### Expected API Responses
-
-**POST /detect** - Crack Detection
-```json
-{
-  "cracks": [
-    {
-      "x": 450,
-      "y": 320,
-      "width": 200,
-      "height": 80,
-      "confidence": 0.92,
-      "severity": 3,
-      "type": "structural"
-    }
-  ]
-}
-```
-
-**GET /sensors/data** - Sensor Readings
-```json
-{
-  "temperature": 32,
-  "moisture": 45,
-  "vibration": 0.8,
-  "strain": 120,
-  "timestamp": "2024-06-20T14:30:00Z"
-}
-```
-
-**GET /severity** - Overall Status
-```json
-{
-  "score": 65,
-  "level": "monitor",
-  "cracks_count": 12,
-  "high_severity": 2
-}
-```
-
----
-
-## 🚢 Deployment
-
-### Build for Production
+### Build for Production (Frontend)
 ```bash
 npm run build
 ```
-
 This creates an optimized `dist/` folder.
-
-### Deploy Options
-
-#### Option 1: GitHub Pages
-```bash
-npm install gh-pages --save-dev
-# Add to package.json:
-# "homepage": "https://yourusername.github.io/bridge-crack-app"
-# "deploy": "npm run build && gh-pages -d dist"
-npm run deploy
-```
-
-#### Option 2: Netlify
-```bash
-npm install -g netlify-cli
-netlify deploy --prod --dir=dist
-```
-
-#### Option 3: Self-Hosted
-```bash
-# Copy dist/ to your web server
-scp -r dist/* user@server:/var/www/html/
-```
-
-#### Option 4: Docker
-```dockerfile
-FROM node:18 AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
-
----
-
-## 🧪 Testing
-
-### Manual Testing Checklist
-- [ ] English UI loads correctly
-- [ ] Arabic UI displays RTL properly
-- [ ] Language toggle switches seamlessly
-- [ ] Image upload works
-- [ ] Crack detection results display correctly
-- [ ] Sensor charts update in real-time
-- [ ] Reports generate and export as PDF
-- [ ] Mobile responsive on all screen sizes
-- [ ] WebSocket connection to RPi works
-- [ ] No console errors
-
-### Browser Compatibility
-- ✅ Chrome 90+
-- ✅ Firefox 88+
-- ✅ Safari 14+
-- ✅ Edge 90+
-- ✅ Mobile Safari (iOS 12+)
-- ✅ Chrome Mobile (Android 5+)
-
----
-
-## 🐛 Troubleshooting
-
-### WebSocket Connection Fails
-```
-Error: WebSocket is closed before the connection is established
-```
-**Solution**: Ensure Raspberry Pi backend is running on correct IP:PORT
-
-### Images Not Uploading
-- Check file size (should be < 5MB)
-- Verify backend has `/upload` endpoint
-- Check CORS headers
-
-### RTL Text Overlapping
-- Ensure `.app.rtl` class is applied
-- Check font supports Arabic characters
-- Verify CSS direction property
-
-### Performance Issues
-- Run `npm run build` and check bundle size
-- Use React DevTools Profiler
-- Check for unnecessary re-renders
-
----
-
-## 📚 Additional Resources
-
-### Documentation
-- [React Documentation](https://react.dev)
-- [Vite Guide](https://vitejs.dev)
-- [CSS Grid Tutorial](https://css-tricks.com/snippets/css/complete-guide-grid/)
-
-### Related Files
-- Excel Plan: `Bridge_Crack_Detection_SensorX_Plan.xlsx`
-- Team Plan: `bridge_crack_team_plan.md`
-- Backend API: See `components/` for endpoint usage
-
----
-
-## 📞 Support & Feedback
-
-For issues or suggestions:
-1. Check troubleshooting section
-2. Review component documentation
-3. Check browser console for errors
-4. Verify WebSocket/API connections
 
 ---
 
 ## 📄 License
 
 This project is part of SensorX Challenge 2026. All rights reserved.
-
----
-
-## 🎯 Next Steps
-
-1. **Connect to Real Backend**
-   - Update WebSocket URL to your Raspberry Pi IP
-   - Implement actual API calls instead of mock data
-
-2. **Add Authentication**
-   - Engineer login system
-   - Role-based access control
-
-3. **Implement PDF Export**
-   - Use `jspdf` library for report generation
-   - Add chart snapshots to PDFs
-
-4. **Database Integration**
-   - Sync local app data with backend database
-   - Historical data caching
-
-5. **Offline Support**
-   - Service Worker for PWA
-   - LocalStorage for offline functionality
-
-6. **Camera Integration**
-   - Real camera access on mobile
-   - Image compression before upload
 
 ---
 
