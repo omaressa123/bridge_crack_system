@@ -231,5 +231,5 @@ This project is part of SensorX Challenge 2026. All rights reserved.
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: June 2024  
+**Last Updated**: June 2026  
 **Built for**: SensorX Challenge 2026
