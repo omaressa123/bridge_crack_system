@@ -1,4 +1,4 @@
-from models import SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport
+from models import SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, init_db
 from datetime import datetime, timedelta
 
 def init_mock_data():
@@ -54,4 +54,5 @@ def init_mock_data():
         db.close()
 
 if __name__ == "__main__":
+    init_db()  # Create database tables first
     init_mock_data()

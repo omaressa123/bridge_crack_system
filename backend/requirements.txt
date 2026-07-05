@@ -8,3 +8,5 @@ reportlab==4.2.2
 python-multipart==0.0.12
 pymysql==1.1.1
 python-dotenv==1.0.1
+paho-mqtt==2.1.0
+twilio==9.4.0

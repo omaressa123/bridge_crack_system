@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 import os
 
 # Load environment variables
@@ -28,11 +29,15 @@ class CrackDetection(Base):
     y = Column(Float)
     width = Column(Float)
     height = Column(Float)
+    area = Column(Float)  # Calculated area (width * height)
     confidence = Column(Float)
     severity_level = Column(Integer)
     crack_type = Column(String(100))
+    crack_identifier = Column(String(255))  # Unique ID to track same crack over time
+    previous_crack_id = Column(Integer, ForeignKey("crack_detections.id"), nullable=True)  # Link to previous detection of same crack
     detected_at = Column(DateTime, default=datetime.utcnow)
     bridge = relationship("Bridge", back_populates="cracks")
+    previous_crack = relationship("CrackDetection", remote_side=[id])  # Self-referential for previous detection
 
 class SensorData(Base):
     __tablename__ = "sensor_data"
@@ -61,7 +66,9 @@ MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "bridge_crack_db")
 
-DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
+# URL-encode the password to handle special characters like @
+encoded_password = quote_plus(MYSQL_PASSWORD)
+DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{encoded_password}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

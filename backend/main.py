@@ -4,10 +4,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from models import Base, engine, SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport
+from mqtt_ingest import start_mqtt_listener
 from PIL import Image
 import io
 import asyncio
 import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from twilio.rest import Client
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
@@ -29,6 +34,20 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+# WebSocket management
+connected_websockets = []
+
+async def broadcast_to_dashboards(payload: dict):
+    for ws in list(connected_websockets):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            connected_websockets.remove(ws)
+
+@app.on_event("startup")
+async def on_startup():
+    start_mqtt_listener(SessionLocal, SensorData, connected_websockets, broadcast_to_dashboards)
 
 def get_db():
     db = SessionLocal()
@@ -62,6 +81,100 @@ def get_recommendation(severity):
     else:
         return "No Action Needed"
 
+def send_email_notification(bridge_name, high_severity_count):
+    """Send email notification for urgent cracks"""
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    email_to = os.getenv("NOTIFICATION_EMAIL_TO")
+
+    if not all([smtp_host, smtp_user, smtp_password, email_to]):
+        print("⚠️ Skipping email notification: missing config")
+        return
+
+    subject = f"URGENT: {high_severity_count} High-Severity Cracks Detected on {bridge_name}"
+    body = f"""
+    Urgent Bridge Crack Notification
+
+    Bridge: {bridge_name}
+    High-Severity Cracks Detected: {high_severity_count}
+    Time: {datetime.utcnow().isoformat()}
+
+    Please inspect the bridge immediately!
+    """
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = email_to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            text = msg.as_string()
+            server.sendmail(smtp_user, email_to, text)
+        print(f"✅ Email notification sent to {email_to}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {str(e)}")
+
+def send_sms_notification(bridge_name, high_severity_count):
+    """Send SMS notification for urgent cracks using Twilio"""
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
+    sms_to = os.getenv("NOTIFICATION_SMS_TO")
+
+    if not all([account_sid, auth_token, twilio_number, sms_to]):
+        print("⚠️ Skipping SMS notification: missing config")
+        return
+
+    try:
+        client = Client(account_sid, auth_token)
+        message_body = f"URGENT: {high_severity_count} high-severity cracks detected on {bridge_name}! Inspect immediately."
+        message = client.messages.create(
+            body=message_body,
+            from_=twilio_number,
+            to=sms_to
+        )
+        print(f"✅ SMS notification sent to {sms_to}, SID: {message.sid}")
+    except Exception as e:
+        print(f"❌ Failed to send SMS: {str(e)}")
+
+def send_urgent_notifications(bridge_name, high_severity_count):
+    """Send both email and SMS notifications for urgent cracks"""
+    if high_severity_count > 0:
+        send_email_notification(bridge_name, high_severity_count)
+        send_sms_notification(bridge_name, high_severity_count)
+
+def generate_crack_identifier(x, y, width, height, threshold=50):
+    """Generate a stable identifier for a crack based on position (bucketed)"""
+    # Bucket coordinates to make identifier stable despite small position changes
+    bucketed_x = round(x / threshold) * threshold
+    bucketed_y = round(y / threshold) * threshold
+    return f"crack_{bucketed_x}_{bucketed_y}"
+
+def calculate_crack_growth(current_crack, previous_crack):
+    """Calculate growth metrics between current and previous crack detection"""
+    if not previous_crack:
+        return None
+    
+    area_growth = current_crack.area - previous_crack.area
+    area_growth_percent = (area_growth / previous_crack.area) * 100 if previous_crack.area > 0 else 0
+    width_growth = current_crack.width - previous_crack.width
+    height_growth = current_crack.height - previous_crack.height
+    
+    return {
+        "area_growth": area_growth,
+        "area_growth_percent": round(area_growth_percent, 2),
+        "width_growth": width_growth,
+        "height_growth": height_growth,
+        "time_delta_hours": round((current_crack.detected_at - previous_crack.detected_at).total_seconds() / 3600, 2),
+        "grew_significantly": area_growth_percent > 10  # Arbitrary threshold for "significant" growth
+    }
+
 @app.get("/")
 def read_root():
     return {"message": "Bridge Crack Detection Backend is running!"}
@@ -69,20 +182,15 @@ def read_root():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("✅ Mobile app connected")
+    print("✅ Client connected")
+    connected_websockets.append(websocket)
     try:
         while True:
-            sensor_data = {
-                "temperature": 32,
-                "moisture": 45,
-                "vibration": 0.8,
-                "strain": 120,
-                "timestamp": datetime.now().isoformat()
-            }
-            await websocket.send_json(sensor_data)
-            await asyncio.sleep(60)
+            await websocket.receive_text()  # Just keep the connection open
     except WebSocketDisconnect:
-        print("❌ Mobile app disconnected")
+        print("❌ Client disconnected")
+        if websocket in connected_websockets:
+            connected_websockets.remove(websocket)
 
 @app.post("/detect")
 async def detect_cracks(image: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -128,40 +236,101 @@ async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depe
         if not bridge:
             return {"error": "Bridge not found"}
         
+        saved_cracks = []
+        significant_growth_count = 0
+        
         for crack_data in cracks:
+            # Calculate area and generate crack identifier
+            area = crack_data["width"] * crack_data["height"]
+            crack_identifier = generate_crack_identifier(
+                crack_data["x"], 
+                crack_data["y"], 
+                crack_data["width"], 
+                crack_data["height"]
+            )
+            
+            # Find previous detection of same crack
+            previous_crack = db.query(CrackDetection).filter(
+                CrackDetection.bridge_id == bridge_id,
+                CrackDetection.crack_identifier == crack_identifier
+            ).order_by(CrackDetection.detected_at.desc()).first()
+            
+            # Create new crack detection
             crack = CrackDetection(
                 bridge_id=bridge_id,
                 x=crack_data["x"],
                 y=crack_data["y"],
                 width=crack_data["width"],
                 height=crack_data["height"],
+                area=area,
                 confidence=crack_data["confidence"],
                 severity_level=crack_data["severity"],
-                crack_type=crack_data["crack_type"]
+                crack_type=crack_data["crack_type"],
+                crack_identifier=crack_identifier,
+                previous_crack_id=previous_crack.id if previous_crack else None
             )
             db.add(crack)
+            
+            # Calculate growth
+            if previous_crack:
+                growth = calculate_crack_growth(crack, previous_crack)
+                if growth and growth["grew_significantly"]:
+                    significant_growth_count += 1
+                    print(f"⚠️ Significant crack growth detected on {bridge.bridge_name}: {growth}")
+            
+            saved_cracks.append(crack)
+        
+        # Calculate high-severity cracks count
+        high_severity_count = len([c for c in cracks if c["severity"] >= 3])
         
         # Create inspection report
         report = InspectionReport(
             bridge_id=bridge_id,
             report_date=datetime.now(),
             total_cracks_detected=len(cracks),
-            high_severity_cracks=len([c for c in cracks if c["severity"] >= 3])
+            high_severity_cracks=high_severity_count
         )
         db.add(report)
         
         db.commit()
         
-        return {"message": "Detections saved successfully", "report_id": report.id}
+        # Send urgent notifications if high-severity cracks or significant growth
+        send_urgent_notifications(bridge.bridge_name, high_severity_count)
+        if significant_growth_count > 0:
+            send_email_notification(
+                bridge.bridge_name, 
+                f"{significant_growth_count} cracks showing significant growth!"
+            )
+            send_sms_notification(
+                bridge.bridge_name, 
+                f"{significant_growth_count} cracks showing significant growth!"
+            )
+        
+        return {
+            "message": "Detections saved successfully", 
+            "report_id": report.id,
+            "significant_growth_count": significant_growth_count
+        }
     except Exception as e:
         db.rollback()
         print(f"Error saving detections: {str(e)}")
         return {"error": str(e)}
 
 @app.get("/sensors/data")
-async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "24h", db: Session = Depends(get_db)):
+async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s", db: Session = Depends(get_db)):
+    # Calculate cutoff time based on time_range parameter (default 30 seconds)
+    if time_range == "30s":
+        cutoff_time = datetime.utcnow() - timedelta(seconds=30)
+    elif time_range == "1h":
+        cutoff_time = datetime.utcnow() - timedelta(hours=1)
+    elif time_range == "24h":
+        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+    else:
+        cutoff_time = datetime.utcnow() - timedelta(seconds=30)  # Default to 30s if invalid
+    
     results = db.query(SensorData).filter(
-        SensorData.bridge_id == bridge_id
+        SensorData.bridge_id == bridge_id,
+        SensorData.timestamp >= cutoff_time
     ).order_by(
         SensorData.timestamp.desc()
     ).limit(limit).all()
@@ -192,8 +361,18 @@ async def get_bridge_status(bridge_id: int, db: Session = Depends(get_db)):
         # If bridge not found, return 404
         return {"error": "Bridge not found"}
     
-    cracks = db.query(CrackDetection).filter(CrackDetection.bridge_id == bridge_id).all()
-    latest_sensor = db.query(SensorData).filter(SensorData.bridge_id == bridge_id).order_by(SensorData.timestamp.desc()).first()
+    # Calculate cutoff time (30 seconds ago) to avoid stale data
+    cutoff_time = datetime.utcnow() - timedelta(seconds=30)
+    
+    # Filter both cracks and sensor data to only include data from last 30 seconds
+    cracks = db.query(CrackDetection).filter(
+        CrackDetection.bridge_id == bridge_id,
+        CrackDetection.detected_at >= cutoff_time
+    ).all()
+    latest_sensor = db.query(SensorData).filter(
+        SensorData.bridge_id == bridge_id,
+        SensorData.timestamp >= cutoff_time
+    ).order_by(SensorData.timestamp.desc()).first()
     
     if not latest_sensor:
         return {"error": "No sensor data available for this bridge"}
@@ -227,6 +406,50 @@ async def get_bridges(db: Session = Depends(get_db)):
 async def get_bridge_reports(bridge_id: int, db: Session = Depends(get_db)):
     reports = db.query(InspectionReport).filter(InspectionReport.bridge_id == bridge_id).all()
     return {"reports": [{"id": r.id, "date": r.report_date.isoformat(), "total_cracks": r.total_cracks_detected, "high_severity": r.high_severity_cracks} for r in reports]}
+
+@app.get("/bridge/{bridge_id}/crack-growth")
+async def get_crack_growth_history(bridge_id: int, db: Session = Depends(get_db)):
+    """Get crack growth history for a bridge, grouped by crack identifier"""
+    bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
+    if not bridge:
+        return {"error": "Bridge not found"}
+    
+    # Get all cracks grouped by crack_identifier
+    cracks = db.query(CrackDetection).filter(
+        CrackDetection.bridge_id == bridge_id
+    ).order_by(CrackDetection.crack_identifier, CrackDetection.detected_at.asc()).all()
+    
+    # Organize by crack identifier
+    crack_history = {}
+    for crack in cracks:
+        if crack.crack_identifier not in crack_history:
+            crack_history[crack.crack_identifier] = []
+        
+        # Get growth from previous detection if available
+        growth = None
+        if crack.previous_crack_id:
+            previous_crack = db.query(CrackDetection).filter(CrackDetection.id == crack.previous_crack_id).first()
+            if previous_crack:
+                growth = calculate_crack_growth(crack, previous_crack)
+        
+        crack_history[crack.crack_identifier].append({
+            "id": crack.id,
+            "x": crack.x,
+            "y": crack.y,
+            "width": crack.width,
+            "height": crack.height,
+            "area": crack.area,
+            "confidence": crack.confidence,
+            "severity_level": crack.severity_level,
+            "crack_type": crack.crack_type,
+            "detected_at": crack.detected_at.isoformat(),
+            "growth": growth
+        })
+    
+    return {
+        "bridge_name": bridge.bridge_name,
+        "crack_history": crack_history
+    }
 
 @app.get("/report/{report_id}/pdf")
 async def get_report_pdf(report_id: int, db: Session = Depends(get_db)):
