@@ -7,6 +7,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
   const [cracks, setCracks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [detectionAttempted, setDetectionAttempted] = useState(false);
 
   const translations = {
     en: {
@@ -32,6 +33,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
       saveDetections: 'Save Detections',
       saving: 'Saving...',
       savedSuccessfully: 'Detections saved successfully!',
+      noCracksDetected: 'The model cannot detect this image. Please connect with the engineering support to solve the problem.',
     },
     ar: {
       uploadPhoto: 'تحميل صورة',
@@ -56,6 +58,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
       saveDetections: 'حفظ الكشوفات',
       saving: 'جاري الحفظ...',
       savedSuccessfully: 'تم حفظ الكشوفات بنجاح!',
+      noCracksDetected: 'النموذج لا يستطيع اكتشاف هذه الصورة. يرجى الاتصال بالدعم الفني لحل المشكلة.',
     }
   };
 
@@ -68,6 +71,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
       reader.onload = (event) => {
         setSelectedImage(event.target.result);
         setCracks([]);
+        setDetectionAttempted(false);
       };
       reader.readAsDataURL(file);
     }
@@ -77,6 +81,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
     if (!selectedImage) return;
     
     setLoading(true);
+    setDetectionAttempted(true);
     
     try {
       // Convert image to FormData
@@ -216,6 +221,19 @@ export default function CrackDetection({ language, t, bridgeId }) {
           )}
         </div>
       </div>
+
+      {detectionAttempted && cracks.length === 0 && (
+        <div className="results-section">
+          <div className="card">
+            <div className="card-header" style={{ color: '#ff6b6b' }}>
+              ⚠️ Detection Result
+            </div>
+            <div style={{ padding: '20px', textAlign: 'center', color: '#4a5568', lineHeight: '1.6' }}>
+              <p>{trans.noCracksDetected}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cracks.length > 0 && (
         <div className="results-section">

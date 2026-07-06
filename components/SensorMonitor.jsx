@@ -2,10 +2,120 @@ import React, { useState, useEffect } from 'react';
 
 const API_URL = 'http://localhost:8000';
 
+/**
+ * Safely processes and filters sensor data to ensure only valid numbers are used
+ * @param {any[]} rawData - Raw data from API (could contain null/undefined/strings)
+ * @returns {number[]} Array of valid numbers
+ */
+const processSensorData = (rawData) => {
+  if (!Array.isArray(rawData)) {
+    return [];
+  }
+  
+  return rawData
+    .map(value => Number(value))
+    .filter(value => !isNaN(value) && isFinite(value));
+};
+
+/**
+ * Calculates safe sensor statistics, preventing crashes from invalid data
+ * @param {any[]} rawData - Raw sensor data
+ * @returns {Object} Statistics with safe defaults
+ */
+const getSensorStats = (rawData) => {
+  const data = processSensorData(rawData);
+  
+  if (data.length === 0) {
+    return {
+      current: 'N/A',
+      avg: 'N/A',
+      max: 'N/A',
+      min: 'N/A'
+    };
+  }
+
+  const current = data[data.length - 1];
+  const avg = (data.reduce((a, b) => a + b, 0) / data.length).toFixed(1);
+  const max = Math.max(...data).toFixed(1);
+  const min = Math.min(...data).toFixed(1);
+  
+  return { current, avg, max, min };
+};
+
+/**
+ * SimpleLineChart component with full defensive programming to prevent NaN errors
+ * @param {Object} props - Component props
+ * @param {any[]} props.data - Sensor data array
+ * @param {string} props.color - Line color
+ * @param {number} [props.height=200] - SVG height
+ */
+const SimpleLineChart = ({ data: rawData, color, height = 200 }) => {
+  // Process and filter raw data to only valid numbers
+  const data = processSensorData(rawData);
+
+  // If no valid data, show friendly placeholder
+  if (data.length === 0) {
+    return (
+      <div style={{ 
+        height: height, 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        color: '#888',
+        fontSize: '14px'
+      }}>
+        No data available
+      </div>
+    );
+  }
+
+  // Calculate min, max with fallback values
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min !== 0 ? max - min : 1; // Prevent division by zero
+
+  // Generate points with safe calculations
+  const points = data.map((value, i) => {
+    // Safe x calculation - if only one point, center it
+    let x;
+    if (data.length === 1) {
+      x = 50; // Center single point in 100px width
+    } else {
+      x = (i / (data.length - 1)) * 100;
+    }
+
+    // Safe y calculation
+    const y = 100 - ((value - min) / range) * 100;
+
+    // Ensure x and y are finite numbers (never NaN/Infinity)
+    const safeX = isFinite(x) ? x : 50;
+    const safeY = isFinite(y) ? y : 50;
+
+    return `${safeX},${safeY}`;
+  }).join(' ');
+
+  return (
+    <svg viewBox="0 0 100 100" height={height} style={{ width: '100%', marginTop: '10px' }}>
+      <polyline 
+        points={points} 
+        fill="none" 
+        stroke={color} 
+        strokeWidth="2" 
+        vectorEffect="non-scaling-stroke" 
+      />
+      <polyline 
+        points={points + ' 100,100 0,100'} 
+        fill={color} 
+        opacity="0.1" 
+      />
+    </svg>
+  );
+};
+
 export default function SensorMonitor({ language, t, bridgeId }) {
   const [sensorData, setSensorData] = useState(null);
   const [error, setError] = useState(null);
-  const [timeRange, setTimeRange] = useState('24h'); // 1h, 6h, 24h, 7d
+  const [timeRange, setTimeRange] = useState('24h');
   const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
@@ -24,10 +134,10 @@ export default function SensorMonitor({ language, t, bridgeId }) {
         } else {
           setError(null);
           setSensorData({
-            temperature: data.temperature_history,
-            moisture: data.moisture_history,
-            vibration: data.vibration_history,
-            strain: data.strain_history,
+            temperature: data.temperature_history || [],
+            moisture: data.moisture_history || [],
+            vibration: data.vibration_history || [],
+            strain: data.strain_history || [],
           });
         }
         
@@ -38,7 +148,7 @@ export default function SensorMonitor({ language, t, bridgeId }) {
     };
     
     fetchSensorData();
-    const interval = setInterval(fetchSensorData, 60000); // Every minute
+    const interval = setInterval(fetchSensorData, 60000);
     
     return () => clearInterval(interval);
   }, [bridgeId, timeRange]);
@@ -65,6 +175,7 @@ export default function SensorMonitor({ language, t, bridgeId }) {
       avg: 'Average',
       max: 'Maximum',
       min: 'Minimum',
+      noData: 'No sensor data available',
     },
     ar: {
       sensors: 'مراقبة المستشعرات',
@@ -87,37 +198,11 @@ export default function SensorMonitor({ language, t, bridgeId }) {
       avg: 'المتوسط',
       max: 'الأقصى',
       min: 'الأدنى',
+      noData: 'لا توجد بيانات من المستشعر',
     }
   };
 
   const trans = translations[language];
-
-  const getSensorStats = (data) => {
-    const current = data[data.length - 1];
-    const avg = (data.reduce((a, b) => a + b) / data.length).toFixed(1);
-    const max = Math.max(...data).toFixed(1);
-    const min = Math.min(...data).toFixed(1);
-    return { current, avg, max, min };
-  };
-
-  const SimpleLineChart = ({ data, color, height = 200 }) => {
-    const max = Math.max(...data);
-    const min = Math.min(...data);
-    const range = max - min || 1;
-    
-    const points = data.map((value, i) => {
-      const x = (i / (data.length - 1)) * 100;
-      const y = 100 - ((value - min) / range) * 100;
-      return `${x},${y}`;
-    }).join(' ');
-
-    return (
-      <svg viewBox="0 0 100 100" height={height} style={{ width: '100%', marginTop: '10px' }}>
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-        <polyline points={points + ' 100,100 0,100'} fill={color} opacity="0.1" />
-      </svg>
-    );
-  };
 
   if (!bridgeId) {
     return <div className="sensor-monitor"><div className="card"><p>Please select a bridge</p></div></div>;
@@ -127,8 +212,19 @@ export default function SensorMonitor({ language, t, bridgeId }) {
     return <div className="sensor-monitor"><div className="card"><p className="error-message">Error: {error}</p></div></div>;
   }
 
-  if (!sensorData || !sensorData.temperature?.length) {
+  if (!sensorData) {
     return <div className="sensor-monitor"><div className="card"><p>Loading...</p></div></div>;
+  }
+
+  // Check if we have any data (process all to be safe)
+  const hasData = 
+    processSensorData(sensorData.temperature).length > 0 ||
+    processSensorData(sensorData.moisture).length > 0 ||
+    processSensorData(sensorData.vibration).length > 0 ||
+    processSensorData(sensorData.strain).length > 0;
+
+  if (!hasData) {
+    return <div className="sensor-monitor"><div className="card"><p>{trans.noData}</p></div></div>;
   }
 
   const temperatureStats = getSensorStats(sensorData.temperature);

@@ -182,13 +182,13 @@ def read_root():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("✅ Client connected")
+    print(" Client connected")
     connected_websockets.append(websocket)
     try:
         while True:
             await websocket.receive_text()  # Just keep the connection open
     except WebSocketDisconnect:
-        print("❌ Client disconnected")
+        print(" Client disconnected")
         if websocket in connected_websockets:
             connected_websockets.remove(websocket)
 

@@ -3,19 +3,36 @@ Fake sensor publisher.
 
 Simulates one or more bridge sensor units publishing readings over MQTT,
 exactly as a real ESP32/Raspberry Pi + sensor kit would once you buy the
-hardware. Swap the `generate_reading()` function for real sensor reads
-later -- nothing else in this file, or in the backend, needs to change.
+hardware.
 
-Usage:
-    pip install paho-mqtt
-    python fake_sensor_publisher.py
+Uses sensor_config.py to toggle between fake and real sensors without
+changing any logic here.
 """
 
 import json
-import random
 import time
+from typing import Dict
 
 import paho.mqtt.client as mqtt
+
+from sensor_config import USE_FAKE_SENSORS
+
+# Import sensors based on config
+if USE_FAKE_SENSORS:
+    from fake_sensors import (
+        temp_sensor,
+        moisture_sensor,
+        accel_sensor,
+        strain_sensor
+    )
+else:
+    from real_sensors import (
+        temp_sensor,
+        moisture_sensor,
+        accel_sensor,
+        strain_sensor
+    )
+
 
 BROKER_HOST = "localhost"
 BROKER_PORT = 1883
@@ -25,27 +42,14 @@ BRIDGE_IDS = ["bridge_1", "bridge_2"]
 
 PUBLISH_INTERVAL_SECONDS = 5
 
-# Chance that a reading is an artificial "spike", to test your alert logic
-# (matches the thresholds used in calculate_bridge_severity: vibration > 1.5g,
-# moisture > 80%, strain > 700 microstrain).
-SPIKE_PROBABILITY = 0.05
 
-
-def generate_reading() -> dict:
-    """Build one fake sensor reading. Replace this with real GPIO/I2C reads
-    once you have physical sensors -- keep the same dict shape."""
-    if random.random() < SPIKE_PROBABILITY:
-        return {
-            "temperature": round(random.uniform(35, 48), 1),
-            "moisture": round(random.uniform(80, 99), 1),
-            "vibration": round(random.uniform(1.5, 3.0), 2),
-            "strain": round(random.uniform(700, 950), 1),
-        }
+def generate_reading() -> Dict[str, float]:
+    """Build one sensor reading using active (fake or real) sensors."""
     return {
-        "temperature": round(random.uniform(20, 34), 1),
-        "moisture": round(random.uniform(10, 79), 1),
-        "vibration": round(random.uniform(0.1, 1.4), 2),
-        "strain": round(random.uniform(0, 699), 1),
+        "temperature": temp_sensor.read(),
+        "moisture": moisture_sensor.read(),
+        "vibration": accel_sensor.read(),
+        "strain": strain_sensor.read(),
     }
 
 
@@ -54,7 +58,8 @@ def main():
     client.connect(BROKER_HOST, BROKER_PORT)
     client.loop_start()
 
-    print(f"Publishing fake readings for {BRIDGE_IDS} every {PUBLISH_INTERVAL_SECONDS}s "
+    sensor_type = "FAKE" if USE_FAKE_SENSORS else "REAL"
+    print(f"Publishing {sensor_type} readings for {BRIDGE_IDS} every {PUBLISH_INTERVAL_SECONDS}s "
           f"to broker {BROKER_HOST}:{BROKER_PORT}. Ctrl+C to stop.")
 
     try:
