@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-
 import { authenticatedFetch, API_URL } from '../api';
+import CrackGrowthChart from './CrackGrowthChart';
+
 
 export default function CrackDetection({ language, t, bridgeId }) {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -8,6 +9,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detectionAttempted, setDetectionAttempted] = useState(false);
+  const [selectedCrackId, setSelectedCrackId] = useState(null); // Feature 1: for growth chart
 
   const translations = {
     en: {
@@ -34,6 +36,8 @@ export default function CrackDetection({ language, t, bridgeId }) {
       saving: 'Saving...',
       savedSuccessfully: 'Detections saved successfully!',
       noCracksDetected: 'The model cannot detect this image. Please connect with the engineering support to solve the problem.',
+      viewHistory: 'View Growth History',
+      hideHistory: 'Hide History',
     },
     ar: {
       uploadPhoto: 'تحميل صورة',
@@ -59,8 +63,11 @@ export default function CrackDetection({ language, t, bridgeId }) {
       saving: 'جاري الحفظ...',
       savedSuccessfully: 'تم حفظ الكشوفات بنجاح!',
       noCracksDetected: 'النموذج لا يستطيع اكتشاف هذه الصورة. يرجى الاتصال بالدعم الفني لحل المشكلة.',
+      viewHistory: 'عرض تاريخ النمو',
+      hideHistory: 'إخفاء التاريخ',
     }
   };
+
 
   const trans = translations[language];
 
@@ -295,7 +302,24 @@ export default function CrackDetection({ language, t, bridgeId }) {
                         </button>
                       </>
                     )}
+                    {/* Feature 1 & 2: Toggle growth history / prediction */}
+                    {crack.dbId && (
+                      <button
+                        className="btn-small"
+                        style={{ marginTop: 6, background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #bee3f8' }}
+                        onClick={() => setSelectedCrackId(
+                          selectedCrackId === crack.dbId ? null : crack.dbId
+                        )}
+                      >
+                        📈 {selectedCrackId === crack.dbId ? trans.hideHistory : trans.viewHistory}
+                      </button>
+                    )}
                   </div>
+
+                  {/* Growth chart expands inline under the selected crack */}
+                  {crack.dbId && selectedCrackId === crack.dbId && (
+                    <CrackGrowthChart crackId={crack.dbId} language={language} />
+                  )}
                 </div>
               ))}
             </div>

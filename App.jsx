@@ -7,7 +7,9 @@ import InspectionReport from './components/InspectionReport';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
 import Login from './components/Login';
+import BridgeMap from './components/BridgeMap';
 import { authenticatedFetch, API_URL } from './api';
+
 
 export default function App() {
   const [language, setLanguage] = useState('en'); // 'en' or 'ar'
@@ -78,6 +80,7 @@ export default function App() {
       cracks: 'Crack Detection',
       sensors: 'Sensors',
       report: 'Report',
+      fleetMap: 'Fleet Map',
       bridgeName: 'Bridge Name',
       selectBridge: 'Select Bridge',
       status: 'Status',
@@ -91,6 +94,7 @@ export default function App() {
       cracks: 'كشف الشروخ',
       sensors: 'المستشعرات',
       report: 'التقرير',
+      fleetMap: 'خريطة الجسور',
       bridgeName: 'اسم الجسر',
       selectBridge: 'اختر الجسر',
       status: 'الحالة',
@@ -99,6 +103,7 @@ export default function App() {
       language: 'English',
     }
   };
+
 
   const t = translations[language];
 
@@ -149,6 +154,9 @@ export default function App() {
           )}
           {currentTab === 'report' && (
             <InspectionReport language={language} t={t} bridgeId={bridgeId} />
+          )}
+          {currentTab === 'map' && (
+            <BridgeMap language={language} />
           )}
         </div>
       </div>

@@ -6,7 +6,9 @@ export default function Navigation({ currentTab, setCurrentTab, language, t }) {
     { id: 'cracks', label: t.cracks, icon: '🔍' },
     { id: 'sensors', label: t.sensors, icon: '📡' },
     { id: 'report', label: t.report, icon: '📋' },
+    { id: 'map', label: t.fleetMap || 'Fleet Map', icon: '🗺️' },
   ];
+
 
   return (
     <nav className={`bottom-nav ${language === 'ar' ? 'rtl' : 'ltr'}`}>

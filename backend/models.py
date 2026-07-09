@@ -17,6 +17,8 @@ class Bridge(Base):
     bridge_name = Column(String(255), index=True)
     city = Column(String(100))
     inspection_date = Column(DateTime, default=datetime.utcnow)
+    latitude = Column(Float, nullable=True)   # GIS: bridge location
+    longitude = Column(Float, nullable=True)  # GIS: bridge location
     cracks = relationship("CrackDetection", back_populates="bridge", cascade="all, delete-orphan")
     sensor_data = relationship("SensorData", back_populates="bridge", cascade="all, delete-orphan")
     reports = relationship("InspectionReport", back_populates="bridge", cascade="all, delete-orphan")
@@ -62,11 +64,15 @@ class InspectionReport(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    google_id = Column(String(100), unique=True, index=True, nullable=False)
+    full_name = Column(String(150), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    name = Column(String(255), nullable=True)
-    picture = Column(String(500), nullable=True)
-    google_sub = Column(String(255), unique=True, index=True, nullable=False)
+    profile_picture = Column(String(500), nullable=True)
+    role = Column(String(50), nullable=True, default="Bridge Engineer")
+    is_active = Column(Integer, nullable=True, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
 
 # Construct MySQL database URL from environment variables
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from models import Base, engine, SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, User
 from auth import verify_google_token, create_jwt_token, verify_jwt_token, get_current_user
 from mqtt_ingest import start_mqtt_listener
+from crack_linking import link_to_previous_crack
 from PIL import Image
 import io
 import asyncio
@@ -41,43 +42,45 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
     idinfo = verify_google_token(request.credential)
     if not idinfo:
         raise HTTPException(status_code=400, detail="Invalid Google token")
-    
+
     email = idinfo.get("email")
     name = idinfo.get("name")
     picture = idinfo.get("picture")
     google_sub = idinfo.get("sub")
-    
+
     if not email or not google_sub:
         raise HTTPException(status_code=400, detail="Invalid Google user profile data")
-        
-    user = db.query(User).filter(User.google_sub == google_sub).first()
+
+    user = db.query(User).filter(User.google_id == google_sub).first()
     if not user:
         user = User(
+            google_id=google_sub,
+            full_name=name or "",
             email=email,
-            name=name,
-            picture=picture,
-            google_sub=google_sub
+            profile_picture=picture,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
     else:
-        user.name = name
-        user.picture = picture
+        user.full_name = name or user.full_name
+        user.profile_picture = picture
         db.commit()
         db.refresh(user)
-        
+
     token = create_jwt_token(user.id, email, name, picture)
-    
+
     return {
         "token": token,
         "user": {
             "id": user.id,
             "email": user.email,
-            "name": user.name,
-            "picture": user.picture
+            "name": user.full_name,
+            "picture": user.profile_picture,
+            "role": user.role,
         }
     }
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -110,6 +113,9 @@ def classify_severity(confidence):
         return 2
     else:
         return 1
+
+# Area (px²) at which a crack is considered critical — matches severity_level=3
+CRITICAL_AREA_THRESHOLD = 10500
 
 def calculate_overall_severity(cracks, latest_sensor):
     high_severity = len([c for c in cracks if c.severity_level >= 3])
@@ -326,6 +332,10 @@ async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depe
                 previous_crack_id=previous_crack.id if previous_crack else None
             )
             db.add(crack)
+            db.flush()  # get crack.id before link_to_previous_crack reads it
+
+            # Feature 1: link to previous crack using bounding-box proximity
+            link_to_previous_crack(db, bridge_id, crack)
             
             # Calculate growth
             if previous_crack:
@@ -535,3 +545,169 @@ async def get_report_pdf(report_id: int, db: Session = Depends(get_db), current_
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Feature 1: Crack Growth History
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/crack/{crack_id}/history")
+async def get_crack_history(
+    crack_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Walk the previous_crack_id chain backwards from crack_id to build a
+    chronological timeline.  Returns growth metrics from first → last point.
+    """
+    # Walk the chain backward
+    timeline = []
+    current = db.query(CrackDetection).filter(CrackDetection.id == crack_id).first()
+    if not current:
+        raise HTTPException(status_code=404, detail="Crack not found")
+
+    visited = set()
+    while current and current.id not in visited:
+        visited.add(current.id)
+        timeline.append(current)
+        if current.previous_crack_id:
+            current = db.query(CrackDetection).filter(
+                CrackDetection.id == current.previous_crack_id
+            ).first()
+        else:
+            break
+
+    # Chronological order (oldest first)
+    timeline.reverse()
+
+    # Compute summary growth metrics
+    growth_pct = None
+    growth_per_day = None
+    if len(timeline) >= 2:
+        first, last = timeline[0], timeline[-1]
+        if first.area and first.area > 0:
+            growth_pct = round((last.area - first.area) / first.area * 100, 1)
+        days = (last.detected_at - first.detected_at).total_seconds() / 86400
+        if days > 0 and first.area is not None:
+            growth_per_day = round((last.area - first.area) / days, 2)
+
+    return {
+        "crack_identifier": timeline[0].crack_identifier if timeline else None,
+        "inspection_count": len(timeline),
+        "growth_pct": growth_pct,
+        "growth_per_day": growth_per_day,
+        "history": [
+            {
+                "id": c.id,
+                "detected_at": c.detected_at.isoformat(),
+                "area": c.area,
+                "width": c.width,
+                "height": c.height,
+                "confidence": c.confidence,
+                "severity_level": c.severity_level,
+            }
+            for c in timeline
+        ],
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# Feature 2: Predictive Maintenance Window
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/crack/{crack_id}/prediction")
+async def get_crack_prediction(
+    crack_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Linear extrapolation of crack growth to estimate when the crack will
+    reach CRITICAL_AREA_THRESHOLD.  Returns bilingual messages.
+    """
+    # Reuse history logic
+    history_resp = await get_crack_history(crack_id, db, current_user)
+    history = history_resp["history"]
+
+    if len(history) < 2:
+        return {
+            "status": "insufficient_data",
+            "message_en": "Not enough inspection history to make a prediction (need ≥ 2 inspections).",
+            "message_ar": "لا توجد بيانات كافية للتنبؤ (يلزم فحصان على الأقل).",
+            "recommended_inspection_date": None,
+        }
+
+    current_area = history[-1]["area"] or 0
+    growth_per_day = history_resp["growth_per_day"] or 0
+
+    if current_area >= CRITICAL_AREA_THRESHOLD:
+        return {
+            "status": "critical_now",
+            "message_en": "⚠️ Crack has already reached critical size. Immediate inspection required.",
+            "message_ar": "⚠️ وصل الشرخ إلى الحجم الحرج. الفحص الفوري مطلوب.",
+            "recommended_inspection_date": datetime.now().date().isoformat(),
+        }
+
+    if growth_per_day <= 0:
+        return {
+            "status": "no_trend",
+            "message_en": "No growth trend detected — crack appears stable. Continue routine monitoring.",
+            "message_ar": "لا يوجد اتجاه نمو — الشرخ يبدو مستقراً. استمر في المراقبة الدورية.",
+            "recommended_inspection_date": None,
+        }
+
+    days_to_critical = (CRITICAL_AREA_THRESHOLD - current_area) / growth_per_day
+    inspection_date = (datetime.now() + timedelta(days=days_to_critical)).date()
+    days_int = int(round(days_to_critical))
+
+    return {
+        "status": "active_growth",
+        "days_to_critical": days_int,
+        "current_area": current_area,
+        "growth_per_day": growth_per_day,
+        "message_en": f"~{days_int} days to critical size — recommend inspection by {inspection_date}.",
+        "message_ar": f"~{days_int} يوماً حتى الحجم الحرج — يُوصى بالفحص بحلول {inspection_date}.",
+        "recommended_inspection_date": inspection_date.isoformat(),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# Feature 3: Multi-Bridge Risk Map
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/bridges/map")
+async def get_bridges_map(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Single endpoint for the fleet map.  Returns every bridge with its
+    max severity, crack counts, and lat/lng.  No N+1 queries from frontend.
+    """
+    from sqlalchemy import func
+
+    bridges = db.query(Bridge).all()
+    result = []
+    for bridge in bridges:
+        cracks = db.query(CrackDetection).filter(
+            CrackDetection.bridge_id == bridge.id
+        ).all()
+
+        max_severity = max((c.severity_level for c in cracks), default=0)
+        total_cracks = len(cracks)
+        high_severity = sum(1 for c in cracks if c.severity_level >= 3)
+
+        result.append({
+            "id": bridge.id,
+            "name": bridge.bridge_name,
+            "city": bridge.city,
+            "latitude": bridge.latitude,
+            "longitude": bridge.longitude,
+            "max_severity": max_severity,
+            "total_cracks": total_cracks,
+            "high_severity_cracks": high_severity,
+            "recommendation": get_recommendation(max_severity),
+        })
+
+    return {"bridges": result}
