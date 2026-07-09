@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:8000';
+import { authenticatedFetch, API_URL } from '../api';
 
 export default function Dashboard({ language, t, bridgeId }) {
   const [bridgeData, setBridgeData] = useState(null);
@@ -11,7 +11,7 @@ export default function Dashboard({ language, t, bridgeId }) {
     
     const fetchBridgeStatus = async () => {
       try {
-        const response = await fetch(`${API_URL}/bridge/${bridgeId}/status`);
+        const response = await authenticatedFetch(`${API_URL}/bridge/${bridgeId}/status`);
         const data = await response.json();
         
         if (data.error) {

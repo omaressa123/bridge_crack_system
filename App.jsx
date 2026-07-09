@@ -6,8 +6,8 @@ import SensorMonitor from './components/SensorMonitor';
 import InspectionReport from './components/InspectionReport';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
-
-const API_URL = 'http://localhost:8000';
+import Login from './components/Login';
+import { authenticatedFetch, API_URL } from './api';
 
 export default function App() {
   const [language, setLanguage] = useState('en'); // 'en' or 'ar'
@@ -15,12 +15,15 @@ export default function App() {
   const [bridgeId, setBridgeId] = useState(null);
   const [bridges, setBridges] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
 
   // Fetch bridges from backend on load
   useEffect(() => {
+    if (!token) return;
     const fetchBridges = async () => {
       try {
-        const response = await fetch(`${API_URL}/bridges`);
+        const response = await authenticatedFetch(`${API_URL}/bridges`);
         const data = await response.json();
         setBridges(data.bridges || []);
         if (data.bridges && data.bridges.length > 0 && !bridgeId) {
@@ -31,15 +34,16 @@ export default function App() {
       }
     };
     fetchBridges();
-  }, []);
+  }, [token]);
 
   // WebSocket connection to Raspberry Pi
   useEffect(() => {
+    if (!token) return;
     let ws;
     let reconnectTimer;
 
     const connect = () => {
-      ws = new WebSocket('ws://localhost:8000/ws');
+      ws = new WebSocket(`ws://localhost:8000/ws?token=${encodeURIComponent(token)}`);
       
       ws.onopen = () => {
         setIsConnected(true);
@@ -65,7 +69,7 @@ export default function App() {
       if (ws) ws.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, []);
+  }, [token]);
 
   const translations = {
     en: {
@@ -98,6 +102,21 @@ export default function App() {
 
   const t = translations[language];
 
+  if (!token) {
+    return (
+      <Login 
+        onLoginSuccess={(newToken, userDetails) => {
+          localStorage.setItem('token', newToken);
+          localStorage.setItem('user', JSON.stringify(userDetails));
+          setToken(newToken);
+          setUser(userDetails);
+        }}
+        language={language}
+        setLanguage={setLanguage}
+      />
+    );
+  }
+
   return (
     <div className={`app ${language === 'ar' ? 'rtl' : 'ltr'}`}>
       <Header 
@@ -108,6 +127,13 @@ export default function App() {
         bridges={bridges}
         bridgeId={bridgeId}
         setBridgeId={setBridgeId}
+        user={user}
+        onSignOut={() => {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setToken(null);
+          setUser(null);
+        }}
       />
       
       <div className="app-container">

@@ -1,4 +1,4 @@
-from models import SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, init_db
+from models import SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, User, init_db
 from datetime import datetime, timedelta
 
 def init_mock_data():

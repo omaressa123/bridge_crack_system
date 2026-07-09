@@ -59,6 +59,15 @@ class InspectionReport(Base):
     high_severity_cracks = Column(Integer)
     bridge = relationship("Bridge", back_populates="reports")
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=True)
+    picture = Column(String(500), nullable=True)
+    google_sub = Column(String(255), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Construct MySQL database URL from environment variables
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")

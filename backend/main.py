@@ -1,9 +1,10 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from models import Base, engine, SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport
+from models import Base, engine, SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, User
+from auth import verify_google_token, create_jwt_token, verify_jwt_token, get_current_user
 from mqtt_ingest import start_mqtt_listener
 from PIL import Image
 import io
@@ -24,6 +25,59 @@ app = FastAPI()
 # Load the YOLO model once at startup
 model_path = os.path.join(os.path.dirname(__file__), "../yolo_model", "best1.pt")
 model = YOLO(model_path)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+from pydantic import BaseModel
+
+class GoogleLoginRequest(BaseModel):
+    credential: str
+
+@app.post("/api/auth/google")
+async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)):
+    idinfo = verify_google_token(request.credential)
+    if not idinfo:
+        raise HTTPException(status_code=400, detail="Invalid Google token")
+    
+    email = idinfo.get("email")
+    name = idinfo.get("name")
+    picture = idinfo.get("picture")
+    google_sub = idinfo.get("sub")
+    
+    if not email or not google_sub:
+        raise HTTPException(status_code=400, detail="Invalid Google user profile data")
+        
+    user = db.query(User).filter(User.google_sub == google_sub).first()
+    if not user:
+        user = User(
+            email=email,
+            name=name,
+            picture=picture,
+            google_sub=google_sub
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        user.name = name
+        user.picture = picture
+        db.commit()
+        db.refresh(user)
+        
+    token = create_jwt_token(user.id, email, name, picture)
+    
+    return {
+        "token": token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture
+        }
+    }
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,15 +101,8 @@ async def broadcast_to_dashboards(payload: dict):
 
 @app.on_event("startup")
 async def on_startup():
-    start_mqtt_listener(SessionLocal, SensorData, connected_websockets, broadcast_to_dashboards)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
+#    start_mqtt_listener(SessionLocal, SensorData, connected_websockets, broadcast_to_dashboards)
+    pass 
 def classify_severity(confidence):
     if confidence > 0.9:
         return 3
@@ -180,9 +227,18 @@ def read_root():
     return {"message": "Bridge Crack Detection Backend is running!"}
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = None, db: Session = Depends(get_db)):
     await websocket.accept()
-    print(" Client connected")
+    if not token:
+        print("WebSocket rejected: Missing token")
+        await websocket.close(code=1008)
+        return
+    payload = verify_jwt_token(token)
+    if not payload:
+        print("WebSocket rejected: Invalid token")
+        await websocket.close(code=1008)
+        return
+    print(f"WebSocket client connected for user {payload.get('email')}")
     connected_websockets.append(websocket)
     try:
         while True:
@@ -193,7 +249,7 @@ async def websocket_endpoint(websocket: WebSocket):
             connected_websockets.remove(websocket)
 
 @app.post("/detect")
-async def detect_cracks(image: UploadFile = File(...), db: Session = Depends(get_db)):
+async def detect_cracks(image: UploadFile = File(...), db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         contents = await image.read()
         img = Image.open(io.BytesIO(contents))
@@ -230,7 +286,7 @@ async def detect_cracks(image: UploadFile = File(...), db: Session = Depends(get
 
 # Endpoint to save detections to database
 @app.post("/detect/{bridge_id}/save")
-async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depends(get_db)):
+async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
         if not bridge:
@@ -317,7 +373,7 @@ async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depe
         return {"error": str(e)}
 
 @app.get("/sensors/data")
-async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s", db: Session = Depends(get_db)):
+async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s", db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     # Calculate cutoff time based on time_range parameter (default 30 seconds)
     if time_range == "30s":
         cutoff_time = datetime.utcnow() - timedelta(seconds=30)
@@ -355,7 +411,7 @@ async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s
     }
 
 @app.get("/bridge/{bridge_id}/status")
-async def get_bridge_status(bridge_id: int, db: Session = Depends(get_db)):
+async def get_bridge_status(bridge_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
     if not bridge:
         # If bridge not found, return 404
@@ -397,18 +453,18 @@ async def get_bridge_status(bridge_id: int, db: Session = Depends(get_db)):
 
 # Get list of bridges
 @app.get("/bridges")
-async def get_bridges(db: Session = Depends(get_db)):
+async def get_bridges(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     bridges = db.query(Bridge).all()
     return {"bridges": [{"id": b.id, "name": b.bridge_name, "city": b.city} for b in bridges]}
 
 # Get all inspection reports for a bridge
 @app.get("/bridge/{bridge_id}/reports")
-async def get_bridge_reports(bridge_id: int, db: Session = Depends(get_db)):
+async def get_bridge_reports(bridge_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     reports = db.query(InspectionReport).filter(InspectionReport.bridge_id == bridge_id).all()
     return {"reports": [{"id": r.id, "date": r.report_date.isoformat(), "total_cracks": r.total_cracks_detected, "high_severity": r.high_severity_cracks} for r in reports]}
 
 @app.get("/bridge/{bridge_id}/crack-growth")
-async def get_crack_growth_history(bridge_id: int, db: Session = Depends(get_db)):
+async def get_crack_growth_history(bridge_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Get crack growth history for a bridge, grouped by crack identifier"""
     bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
     if not bridge:
@@ -452,7 +508,7 @@ async def get_crack_growth_history(bridge_id: int, db: Session = Depends(get_db)
     }
 
 @app.get("/report/{report_id}/pdf")
-async def get_report_pdf(report_id: int, db: Session = Depends(get_db)):
+async def get_report_pdf(report_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     report = db.query(InspectionReport).filter(InspectionReport.id == report_id).first()
     if not report:
         return {"error": "Report not found"}

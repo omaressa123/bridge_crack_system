@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Header({ language, setLanguage, t, isConnected, bridges, bridgeId, setBridgeId }) {
+export default function Header({ language, setLanguage, t, isConnected, bridges, bridgeId, setBridgeId, user, onSignOut }) {
   return (
     <header className="app-header">
       <div className="header-content">
@@ -25,12 +25,24 @@ export default function Header({ language, setLanguage, t, isConnected, bridges,
           </select>
         </div>
         
-        <button 
-          className="language-btn"
-          onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-        >
-          {t.language}
-        </button>
+        <div className="header-right">
+          {user && (
+            <div className="user-profile">
+              <img src={user.picture} alt={user.name} className="user-avatar" referrerPolicy="no-referrer" />
+              <span className="user-name">{user.name}</span>
+              <button className="signout-btn" onClick={onSignOut}>
+                {language === 'en' ? 'Sign Out' : 'خروج'}
+              </button>
+            </div>
+          )}
+          
+          <button 
+            className="language-btn"
+            onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+          >
+            {t.language}
+          </button>
+        </div>
       </div>
     </header>
   );

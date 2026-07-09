@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:8000';
+import { authenticatedFetch, API_URL } from '../api';
 
 /**
  * Safely processes and filters sensor data to ensure only valid numbers are used
@@ -123,7 +123,7 @@ export default function SensorMonitor({ language, t, bridgeId }) {
     
     const fetchSensorData = async () => {
       try {
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `${API_URL}/sensors/data?bridge_id=${bridgeId}&limit=7`
         );
         const data = await response.json();

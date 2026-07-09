@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const API_URL = 'http://localhost:8000';
+import { authenticatedFetch, API_URL } from '../api';
 
 export default function CrackDetection({ language, t, bridgeId }) {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -90,7 +90,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
       formData.append('image', blob, 'image.jpg');
       
       // Send to backend
-      const response = await fetch(`${API_URL}/detect`, {
+      const response = await authenticatedFetch(`${API_URL}/detect`, {
         method: 'POST',
         body: formData
       });
@@ -126,9 +126,8 @@ export default function CrackDetection({ language, t, bridgeId }) {
     setSaving(true);
     
     try {
-      const response = await fetch(`${API_URL}/detect/${bridgeId}/save`, {
+      const response = await authenticatedFetch(`${API_URL}/detect/${bridgeId}/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cracks)
       });
       

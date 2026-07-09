@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:8000';
+import { authenticatedFetch, API_URL } from '../api';
 
 export default function InspectionReport({ language, t, bridgeId }) {
   const [reports, setReports] = useState([]);
@@ -60,7 +60,7 @@ export default function InspectionReport({ language, t, bridgeId }) {
     
     const fetchReports = async () => {
       try {
-        const response = await fetch(`${API_URL}/bridge/${bridgeId}/reports`);
+        const response = await authenticatedFetch(`${API_URL}/bridge/${bridgeId}/reports`);
         const data = await response.json();
         
         if (data.error) {
@@ -100,7 +100,7 @@ export default function InspectionReport({ language, t, bridgeId }) {
 
   const handleDownloadPDF = async (reportId) => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `${API_URL}/report/${reportId}/pdf`
       );
       const blob = await response.blob();
