@@ -11,16 +11,20 @@ import math
 
 
 # Max pixel distance between bounding-box centers to be considered the same crack
-MATCH_DISTANCE_THRESHOLD = 80  # pixels
+MATCH_DISTANCE_THRESHOLD = 40  # pixels
+
 
 
 def _center(crack):
-    """Return (cx, cy) of a CrackDetection."""
-    return crack.x, crack.y
+    return (
+        crack.x + crack.width / 2,
+        crack.y + crack.height / 2,
+    )
 
 
 def _distance(c1, c2):
     """Euclidean distance between two (x, y) centres."""
+        crack.y + crack.height / 2
     return math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2)
 
 
@@ -36,6 +40,7 @@ def link_to_previous_crack(db, bridge_id: int, new_crack: CrackDetection) -> Cra
     prior_detections = (
         db.query(CrackDetection)
         .filter(CrackDetection.bridge_id == bridge_id)
+        .filter(CrackDetection.report_id != new_crack.report_id)   
         .order_by(CrackDetection.detected_at.desc())
         .all()
     )

@@ -40,6 +40,8 @@ class CrackDetection(Base):
     detected_at = Column(DateTime, default=datetime.utcnow)
     bridge = relationship("Bridge", back_populates="cracks")
     previous_crack = relationship("CrackDetection", remote_side=[id])  # Self-referential for previous detection
+    report_id = Column(Integer, ForeignKey("inspection_reports.id"), nullable=True)
+    report = relationship("InspectionReport", back_populates="cracks")
 
 class SensorData(Base):
     __tablename__ = "sensor_data"
@@ -59,7 +61,19 @@ class InspectionReport(Base):
     report_date = Column(DateTime, default=datetime.utcnow)
     total_cracks_detected = Column(Integer)
     high_severity_cracks = Column(Integer)
-    bridge = relationship("Bridge", back_populates="reports")
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    image_path = Column(String(500), nullable=True)
+
+    model_version = Column(String(100), nullable=True)
+
+    status = Column(String(30), default="Pending")
+
+    cracks = relationship(
+        "CrackDetection",
+        back_populates="report",
+        cascade="all, delete-orphan"
+    )
 
 class User(Base):
     __tablename__ = "users"
@@ -72,7 +86,7 @@ class User(Base):
     is_active = Column(Integer, nullable=True, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
-
+    reports = relationship("InspectionReport")
 
 # Construct MySQL database URL from environment variables
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
