@@ -5,7 +5,7 @@ from database import get_db
 from models import Bridge, CrackDetection, InspectionReport
 from auth import get_current_user
 from services.prediction import detect_cracks_with_yolo, calculate_crack_growth, predict_crack_maintenance
-from services.crack_linking import link_to_previous_crack
+from crack_linking import link_to_previous_crack
 from services.notification import send_urgent_notifications, send_email_notification, send_sms_notification
 
 router = APIRouter(
@@ -92,9 +92,10 @@ async def save_detections(bridge_id: int, cracks: list[dict], db: Session = Depe
             send_sms_notification(bridge.bridge_name, msg)
         
         return {
-            "message": "Detections saved successfully", 
+            "message": "Detections saved successfully",
             "report_id": report.id,
-            "significant_growth_count": significant_growth_count
+            "significant_growth_count": significant_growth_count,
+            "saved_crack_ids": [c.id for c in saved_cracks],
         }
     except Exception as e:
         db.rollback()

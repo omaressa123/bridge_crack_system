@@ -2,6 +2,8 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.2
 pydantic-settings==2.6.0
+sqlalchemy==2.0.36
+PyJWT==2.9.0
 pillow==10.4.0
 ultralytics==8.3.68
 reportlab==4.2.2

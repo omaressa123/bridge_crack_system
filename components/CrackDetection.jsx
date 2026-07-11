@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { authenticatedFetch, API_URL } from '../api';
 import CrackGrowthChart from './CrackGrowthChart';
 
@@ -9,7 +9,9 @@ export default function CrackDetection({ language, t, bridgeId }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detectionAttempted, setDetectionAttempted] = useState(false);
-  const [selectedCrackId, setSelectedCrackId] = useState(null); // Feature 1: for growth chart
+  const [selectedCrackId, setSelectedCrackId] = useState(null);
+  const [trackedCracks, setTrackedCracks] = useState([]);
+  const [trackedLoading, setTrackedLoading] = useState(false);
 
   const translations = {
     en: {
@@ -38,6 +40,11 @@ export default function CrackDetection({ language, t, bridgeId }) {
       noCracksDetected: 'The model cannot detect this image. Please connect with the engineering support to solve the problem.',
       viewHistory: 'View Growth History',
       hideHistory: 'Hide History',
+      trackedCracks: 'Tracked Cracks',
+      trackedSubtitle: 'Cracks with multi-inspection history on this bridge',
+      noTrackedCracks: 'No tracked cracks yet. Run seed data or save repeated detections.',
+      inspections: 'inspections',
+      demoCrack: 'Demo lineage crack',
     },
     ar: {
       uploadPhoto: 'تحميل صورة',
@@ -65,11 +72,47 @@ export default function CrackDetection({ language, t, bridgeId }) {
       noCracksDetected: 'النموذج لا يستطيع اكتشاف هذه الصورة. يرجى الاتصال بالدعم الفني لحل المشكلة.',
       viewHistory: 'عرض تاريخ النمو',
       hideHistory: 'إخفاء التاريخ',
+      trackedCracks: 'الشروخ المتتبعة',
+      trackedSubtitle: 'شروخ لها سجل فحوصات متعددة على هذا الجسر',
+      noTrackedCracks: 'لا توجد شروخ متتبعة بعد. شغّل بيانات التجربة أو احفظ كشوفات متكررة.',
+      inspections: 'فحوصات',
+      demoCrack: 'شرخ تجريبي للعرض',
     }
   };
 
 
   const trans = translations[language];
+
+  const fetchTrackedCracks = useCallback(async () => {
+    if (!bridgeId) return;
+    setTrackedLoading(true);
+    try {
+      const response = await authenticatedFetch(`${API_URL}/bridge/${bridgeId}/crack-growth`);
+      const data = await response.json();
+      if (data.crack_history) {
+        const tracked = Object.entries(data.crack_history)
+          .filter(([, entries]) => entries.length >= 2)
+          .map(([identifier, entries]) => ({
+            identifier,
+            latestId: entries[entries.length - 1].id,
+            inspectionCount: entries.length,
+            latestArea: entries[entries.length - 1].area,
+            crackType: entries[entries.length - 1].crack_type,
+            isDemo: identifier === 'CRK-CAIRO12-001',
+          }))
+          .sort((a, b) => b.inspectionCount - a.inspectionCount);
+        setTrackedCracks(tracked);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tracked cracks:', error);
+    } finally {
+      setTrackedLoading(false);
+    }
+  }, [bridgeId]);
+
+  useEffect(() => {
+    fetchTrackedCracks();
+  }, [fetchTrackedCracks]);
 
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
@@ -146,6 +189,7 @@ export default function CrackDetection({ language, t, bridgeId }) {
         alert(trans.savedSuccessfully);
         setCracks([]);
         setSelectedImage(null);
+        fetchTrackedCracks();
       }
       
     } catch (error) {
@@ -186,6 +230,56 @@ export default function CrackDetection({ language, t, bridgeId }) {
 
   return (
     <div className="crack-detection">
+      {bridgeId && (
+        <div className="tracked-cracks-section" style={{ marginBottom: 16 }}>
+          <div className="card">
+            <div className="card-header">
+              📈 {trans.trackedCracks}
+              <span style={{ fontSize: '0.78rem', fontWeight: 400, color: '#718096', marginLeft: 8 }}>
+                {trans.trackedSubtitle}
+              </span>
+            </div>
+            {trackedLoading ? (
+              <p style={{ padding: '12px 16px', color: '#718096' }}>{trans.loading}</p>
+            ) : trackedCracks.length === 0 ? (
+              <p style={{ padding: '12px 16px', color: '#718096' }}>{trans.noTrackedCracks}</p>
+            ) : (
+              <div className="crack-list" style={{ padding: '8px 12px 12px' }}>
+                {trackedCracks.map((tracked) => (
+                  <div key={tracked.identifier} className="crack-item">
+                    <div className="crack-header">
+                      <span className="crack-type">
+                        {tracked.isDemo ? `⭐ ${trans.demoCrack}` : tracked.identifier}
+                      </span>
+                      <span className="severity-badge severity-2">
+                        {tracked.inspectionCount} {trans.inspections}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#718096', marginTop: 4 }}>
+                      {getCrackTypeLabel(tracked.crackType)} · {Math.round(tracked.latestArea).toLocaleString()} px²
+                    </div>
+                    <div className="crack-actions">
+                      <button
+                        className="btn-small"
+                        style={{ marginTop: 6, background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #bee3f8' }}
+                        onClick={() => setSelectedCrackId(
+                          selectedCrackId === tracked.latestId ? null : tracked.latestId
+                        )}
+                      >
+                        📈 {selectedCrackId === tracked.latestId ? trans.hideHistory : trans.viewHistory}
+                      </button>
+                    </div>
+                    {selectedCrackId === tracked.latestId && (
+                      <CrackGrowthChart crackId={tracked.latestId} language={language} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="upload-section">
         <div className="card">
           <div className="card-header">{trans.uploadPhoto}</div>

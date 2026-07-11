@@ -24,7 +24,6 @@ def _center(crack):
 
 def _distance(c1, c2):
     """Euclidean distance between two (x, y) centres."""
-        crack.y + crack.height / 2
     return math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2)
 
 

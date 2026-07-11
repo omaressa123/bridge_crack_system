@@ -1,4 +1,5 @@
-from models import SessionLocal, Bridge, CrackDetection, SensorData, InspectionReport, User, init_db
+from database import SessionLocal, init_db
+from models import Bridge, CrackDetection, SensorData, InspectionReport
 from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────────

@@ -1,235 +1,226 @@
-# Bridge Crack Detection Mobile App - React
+# Bridge Crack Detection System
 
-## 🏗️ Project Overview
+Bilingual (Arabic/English) platform for bridge infrastructure monitoring — from single-image crack detection to **predictive, fleet-level risk management**.
 
-Bilingual (Arabic/English) mobile application for real-time bridge infrastructure crack detection and sensor monitoring. Built with React, supports image upload, live sensor data visualization, and inspection report generation.
-
----
-
-## ✨ Features
-
-### 📊 Dashboard
-- Overall bridge status and severity level
-- Live sensor data (temperature, moisture, vibration, strain)
-- Recent activity feed
-- Quick statistics (crack count, high-severity cracks)
-
-### 🔍 Crack Detection
-- Photo upload (from device or camera)
-- Real-time crack detection with YOLOv8 model
-- Confidence scores and severity levels
-- Engineer confirmation/rejection workflow
-- Crack coordinate mapping
-
-### 📡 Sensor Monitoring
-- Real-time sensor data visualization
-- Time-series charts (temperature, moisture, vibration, strain)
-- Anomaly detection alerts
-- Historical data analysis
-- Customizable time ranges (1h, 6h, 24h, 7d)
-
-### 📋 Inspection Reports
-- Auto-generated inspection reports
-- PDF export and sharing
-- Engineer notes and recommendations
-- Historical report archive
-- Quick report generation
-
-### 🌍 Bilingual Support
-- Full Arabic/English support
-- RTL (Right-to-Left) layout for Arabic
-- Seamless language switching
-- All UI elements translated
+Built for **SensorX Challenge 2026**. Stack: **React (Vite)** frontend + **FastAPI / MySQL** backend, with YOLOv8 crack detection, MQTT sensor ingestion, Google OAuth, and offline-capable deployment on low-cost hardware (e.g. Raspberry Pi).
 
 ---
 
-## 🚀 Getting Started
+## What it does
+
+| Module | Capability |
+|--------|------------|
+| **Dashboard** | Bridge status, severity, live sensor snapshot, recommendations |
+| **Crack detection** | Upload/capture image → YOLOv8 inference → engineer confirm → save to DB |
+| **Crack growth trend** | Track the same physical crack across inspections; area-over-time chart |
+| **Predictive maintenance** | Estimate days until critical crack size (linear extrapolation) |
+| **Fleet risk map** | Cairo-area bridges on OpenStreetMap, color-coded by severity |
+| **Sensor monitoring** | Temperature, moisture, vibration, strain — REST + WebSocket |
+| **Inspection reports** | Auto-generated summaries + PDF export |
+| **Auth** | Google Sign-In with JWT session |
+
+---
+
+## Architecture
+
+```
+┌─────────────────┐     REST / WebSocket      ┌──────────────────────────────┐
+│  React Frontend │ ◄──────────────────────► │  FastAPI Backend (backend/)  │
+│  (Vite, port    │                           │  • Routers (auth, bridges,   │
+│   5173)         │                           │    cracks, reports, sensors) │
+└─────────────────┘                           │  • YOLOv8 (yolo_model/)      │
+                                              │  • MQTT ingest → MySQL       │
+┌─────────────────┐     MQTT                  └──────────────┬───────────────┘
+│ fake_sensor_    │ ────────────────────────────────────────►│
+│ publisher.py    │   sensors/bridge_N/data                  ▼
+└─────────────────┘                                    MySQL database
+```
+
+---
+
+## Quick start
 
 ### Prerequisites
-- Node.js 16+ (download from https://nodejs.org/)
-- npm or yarn package manager
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-- Python 3.8+ for backend
-- MySQL database for backend
 
-### Installation
+- **Node.js** 18+ and npm
+- **Python** 3.10+
+- **MySQL** 8+
+- **Google OAuth** client ID (for login)
+- YOLO weights in `yolo_model/best1.pt`
 
-#### Backend Setup
-1. **Navigate to backend directory**
+### 1. Backend
+
 ```bash
 cd backend
-```
-
-2. **Create a virtual environment (optional but recommended)**
-```bash
 python -m venv venv
-# On Windows:
-venv\Scripts\activate
-# On Linux/Mac:
-source venv/bin/activate
-```
+source venv/bin/activate          # Linux/macOS
 
-3. **Install dependencies**
-```bash
 pip install -r requirements.txt
 ```
 
-4. **Create .env file**
-```bash
-cp .env.example .env
-```
-Then edit the .env file with your MySQL credentials.
+Create `backend/.env` (minimum):
 
-5. **Initialize database (optional: add mock data)**
-```bash
-python init_db.py
-```
-
-6. **Start backend server**
-```bash
-python main.py
-```
-Backend will be available at `http://localhost:8000`
-
-#### Frontend Setup
-1. **Navigate to project root directory**
-```bash
-cd ..
-```
-
-2. **Install dependencies**
-```bash
-npm install
-```
-
-3. **Start development server**
-```bash
-npm run dev
-```
-The app will open automatically at `http://localhost:5173`
-
----
-
-## 📁 Project Structure
-
-```
-bridge-crack-app/
-├── components/
-│   ├── Header.jsx              # App header with language toggle and bridge selector
-│   ├── Navigation.jsx          # Bottom navigation tabs
-│   ├── Dashboard.jsx           # Overview and status
-│   ├── CrackDetection.jsx      # Photo upload & detection
-│   ├── SensorMonitor.jsx       # Real-time sensor data
-│   └── InspectionReport.jsx    # Report management
-├── backend/
-│   ├── main.py                 # FastAPI main backend app
-│   ├── models.py               # SQLAlchemy models
-│   ├── init_db.py              # Database initialization with mock data
-│   ├── requirements.txt        # Python dependencies
-│   ├── rdd.yaml                # YOLO model configuration
-│   └── .env.example            # Environment variables template
-├── yolo_model/                 # YOLO model weights
-│   ├── best1.pt                # Best trained model
-│   ├── last.pt                 # Last checkpoint
-│   └── results 2.png           # Training results
-├── App.jsx                     # Main app component
-├── App.css                     # Global styles (fully styled)
-├── main.jsx                    # React entry point
-├── index.html                  # HTML template
-├── vite.config.js              # Vite configuration
-├── package.json                # Dependencies
-└── .gitignore                  # Git ignore file
-```
-
----
-
-## 🔧 Configuration
-
-### API_URL Configuration
-All frontend components use an API_URL constant. You can change it in each component or make a global config file.
-
-### Environment Variables for Backend
-Create a .env file in backend/ directory:
-```
+```env
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=your_password
 MYSQL_DATABASE=bridge_crack_db
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+JWT_SECRET=your-long-random-secret
 ```
 
----
-
-## 💻 Development
-
-### Available Scripts (Frontend)
+Initialize database and demo data, then start the API:
 
 ```bash
-# Start development server
+python init_db.py
+python main.py
+```
+
+API: **http://localhost:8000** · Docs: **http://localhost:8000/docs**
+
+Full backend setup: [backend/README.md](backend/README.md)
+
+### 2. Frontend
+
+```bash
+# From project root
+npm install
 npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Lint code (setup eslint first)
-npm run lint
 ```
 
----
+App: **http://localhost:5173**
 
-## 🎨 Styling Guide
+The frontend reads the API base URL from [api.js](api.js) (`API_URL = http://localhost:8000`). Change it if the backend runs on another host (e.g. Raspberry Pi on the LAN).
 
-### CSS Variables
-All colors and spacing use CSS variables defined in `App.css`:
+### 3. Optional — simulate sensors
 
-```css
-:root {
-  --primary-color: #1F4E78;      /* Main blue */
-  --secondary-color: #4472C4;    /* Accent blue */
-  --success-color: #10B981;      /* Green */
-  --warning-color: #F59E0B;      /* Orange */
-  --danger-color: #EF4444;       /* Red */
-  --light-bg: #F5F7FA;           /* Light gray background */
-  --border-color: #E5E7EB;       /* Light border */
-  --text-primary: #1F2937;       /* Dark text */
-  --text-secondary: #6B7280;     /* Gray text */
-}
-```
-
----
-
-## 🌐 Bilingual Implementation
-
-### Language Switching
-```jsx
-// In parent component
-const [language, setLanguage] = useState('en'); // 'en' or 'ar'
-
-// Pass to children
-<ChildComponent language={language} t={translations[language]} />
-```
-
----
-
-##  Deployment
-
-### Build for Production (Frontend)
 ```bash
-npm run build
+python fake_sensor_publisher.py
 ```
-This creates an optimized `dist/` folder.
+
+Requires an MQTT broker on `localhost:1883`. See [docx/README_MQTT_SETUP.md](docx/README_MQTT_SETUP.md).
 
 ---
 
-## 📄 License
+## Demo walkthrough
 
-This project is part of SensorX Challenge 2026. All rights reserved.
+After seeding (`python init_db.py`):
+
+1. **Log in** with Google OAuth.
+2. **Dashboard** — bridge status and sensors for Qasr El-Nile Bridge.
+3. **Crack Detection** → **Tracked Cracks** → open **Demo lineage crack** (`CRK-CAIRO12-001`).
+   - Growth chart: area over 3 inspections (+437% since first detection).
+   - Prediction card: estimated days to critical size + recommended inspection date.
+4. **Fleet Map** — 3 Cairo bridges pinned and colored by risk; click markers for details.
+
+Presenter script: [docx/DEMO_TALKING_POINTS.md](docx/DEMO_TALKING_POINTS.md)
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: Jul 2026  
-**Built for**: SensorX Challenge 2026
+## Project structure
+
+```
+bridge_crack_system/
+├── App.jsx                     # Main app shell, auth gate, WebSocket, routing
+├── api.js                      # API_URL + authenticatedFetch helper
+├── components/
+│   ├── BridgeMap.jsx           # Fleet GIS map (Leaflet)
+│   ├── CrackDetection.jsx      # Upload, detect, save, tracked cracks panel
+│   ├── CrackGrowthChart.jsx    # Growth chart + prediction card
+│   ├── Dashboard.jsx
+│   ├── Header.jsx
+│   ├── InspectionReport.jsx
+│   ├── Login.jsx               # Google Sign-In
+│   ├── Navigation.jsx          # Bottom tabs incl. Fleet Map
+│   └── SensorMonitor.jsx
+├── backend/                    # FastAPI application (see backend/README.md)
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   ├── auth.py
+│   ├── crack_linking.py
+│   ├── init_db.py
+│   ├── routers/                # auth, bridges, cracks, reports, sensors
+│   └── services/               # mqtt, prediction, pdf, notification, analysis
+├── yolo_model/
+│   └── best1.pt                # YOLOv8 weights
+├── fake_sensor_publisher.py    # MQTT test publisher
+├── fake_sensors.py / real_sensors.py
+├── sensor_config.py
+├── docx/                       # Plans, DB docs, MQTT guide, demo script
+│   ├── plan.md
+│   ├── plan_update.md
+│   └── DEMO_TALKING_POINTS.md
+├── package.json
+└── vite.config.js
+```
+
+---
+
+## Frontend scripts
+
+```bash
+npm run dev       # Development server (http://localhost:5173)
+npm run build     # Production build → dist/
+npm run preview   # Preview production build
+```
+
+---
+
+## Key API endpoints (summary)
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/auth/google` | Login |
+| `GET /bridges` | Bridge list |
+| `GET /bridges/map` | Fleet map data |
+| `GET /bridge/{id}/status` | Dashboard status |
+| `POST /detect` | YOLO crack detection |
+| `POST /detect/{id}/save` | Save detections + report |
+| `GET /crack/{id}/history` | Crack growth timeline |
+| `GET /crack/{id}/prediction` | Maintenance window estimate |
+| `GET /bridge/{id}/crack-growth` | All tracked cracks on a bridge |
+| `GET /sensors/data` | Sensor history |
+| `WS /ws?token=` | Live sensor stream |
+| `GET /report/{id}/pdf` | PDF download |
+
+Full table with auth requirements: [backend/README.md](backend/README.md)
+
+---
+
+## Bilingual support
+
+- Full **English / Arabic** UI with RTL layout for Arabic
+- Language toggle in the header
+- Prediction messages returned in both languages from the API
+
+---
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [backend/README.md](backend/README.md) | Backend setup, env vars, full API reference |
+| [docx/plan.md](docx/plan.md) | Original enhancement plan (3 features) |
+| [docx/plan_update.md](docx/plan_update.md) | Feature completion status |
+| [docx/DEMO_TALKING_POINTS.md](docx/DEMO_TALKING_POINTS.md) | Judge demo script |
+| [docx/DATABASE.md](docx/DATABASE.md) | Database schema |
+| [docx/README_MQTT_SETUP.md](docx/README_MQTT_SETUP.md) | MQTT broker + sensor simulation |
+
+---
+
+## Honest scope notes (for demos / judges)
+
+- **Prediction** is linear trend extrapolation from historical detections — not a trained ML forecasting model.
+- **Growth demo data** is backdated seed data (`CRK-CAIRO12-001`) simulating weeks of field inspections.
+- **Crack linking** uses bounding-box proximity on the same bridge — MVP approach; production v2 would add visual re-identification.
+
+---
+
+## License
+
+SensorX Challenge 2026 — all rights reserved.
+
+**Version:** 2.0.0  
+**Last updated:** July 2026
