@@ -1,15 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime
-from dotenv import load_dotenv
-from urllib.parse import quote_plus
-import os
-
-# Load environment variables
-load_dotenv()
-
-Base = declarative_base()
+from database import Base
 
 class Bridge(Base):
     __tablename__ = "bridges"
@@ -62,13 +54,9 @@ class InspectionReport(Base):
     total_cracks_detected = Column(Integer)
     high_severity_cracks = Column(Integer)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-
     image_path = Column(String(500), nullable=True)
-
     model_version = Column(String(100), nullable=True)
-
     status = Column(String(30), default="Pending")
-
     cracks = relationship(
         "CrackDetection",
         back_populates="report",
@@ -87,20 +75,3 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
     reports = relationship("InspectionReport")
-
-# Construct MySQL database URL from environment variables
-MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
-MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
-MYSQL_USER = os.getenv("MYSQL_USER", "root")
-MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
-MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "bridge_crack_db")
-
-# URL-encode the password to handle special characters like @
-encoded_password = quote_plus(MYSQL_PASSWORD)
-DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{encoded_password}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
-
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def init_db():
-    Base.metadata.create_all(bind=engine)
