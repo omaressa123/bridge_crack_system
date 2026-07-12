@@ -3,6 +3,7 @@ import logging
 import os
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -63,6 +64,19 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Preserve legacy `{error: ...}` response shape for the frontend."""
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return JSONResponse(status_code=exc.status_code, content={"error": detail})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return validation errors in legacy `{error: ...}` shape."""
+    errors = exc.errors()
+    if errors:
+        first = errors[0]
+        loc = " ".join(str(part) for part in first.get("loc", []) if part != "body")
+        message = f"{loc}: {first['msg']}".strip(": ")
+    else:
+        message = "Validation error"
+    return JSONResponse(status_code=422, content={"error": message})
 
 
 @app.get("/")

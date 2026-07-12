@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
-from auth import get_current_user, verify_jwt_token
+from auth import verify_jwt_token
 from database import get_db
-from models import SensorData
-from schemas import SensorDataResponse
+from deps import get_current_active_user
+from models import Bridge, SensorData
+from schemas import SensorDataResponse, SensorTimeRange
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,12 @@ router = APIRouter(
 )
 
 connected_websockets = []
+
+TIME_RANGE_DELTAS = {
+    SensorTimeRange.thirty_seconds: timedelta(seconds=30),
+    SensorTimeRange.one_hour: timedelta(hours=1),
+    SensorTimeRange.twenty_four_hours: timedelta(hours=24),
+}
 
 
 async def broadcast_to_dashboards(payload: dict):
@@ -30,23 +37,20 @@ async def broadcast_to_dashboards(payload: dict):
 
 @router.get("/sensors/data", response_model=SensorDataResponse)
 async def get_sensor_data(
-    bridge_id: int,
-    limit: int = 7,
-    time_range: str = "30s",
+    bridge_id: int = Query(..., ge=1, description="Bridge ID"),
+    limit: int = Query(7, ge=1, le=100),
+    time_range: SensorTimeRange = Query(SensorTimeRange.thirty_seconds),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_active_user),
 ):
-    if time_range == "30s":
-        cutoff_time = datetime.utcnow() - timedelta(seconds=30)
-    elif time_range == "1h":
-        cutoff_time = datetime.utcnow() - timedelta(hours=1)
-    elif time_range == "24h":
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
-    else:
-        cutoff_time = datetime.utcnow() - timedelta(seconds=30)
+    bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
+    if not bridge:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bridge not found")
+
+    cutoff_time = datetime.utcnow() - TIME_RANGE_DELTAS[time_range]
 
     results = db.query(SensorData).filter(
-        SensorData.bridge_id == bridge_id,
+        SensorData.bridge_id == bridge.id,
         SensorData.timestamp >= cutoff_time,
     ).order_by(
         SensorData.timestamp.desc()
