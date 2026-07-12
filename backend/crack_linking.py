@@ -6,13 +6,17 @@ by comparing bounding-box centers. Updates previous_crack_id and crack_identifie
 so the history chain stays intact.
 """
 
-from models import CrackDetection
 import math
 
+from constants import CRACK_IDENTIFIER_BUCKET_SIZE, CRACK_MATCH_DISTANCE_THRESHOLD
+from models import CrackDetection
 
-# Max pixel distance between bounding-box centers to be considered the same crack
-MATCH_DISTANCE_THRESHOLD = 40  # pixels
 
+def generate_crack_identifier(x: float, y: float) -> str:
+    """Generate a bucketed identifier for a crack position."""
+    bucketed_x = round(x / CRACK_IDENTIFIER_BUCKET_SIZE) * CRACK_IDENTIFIER_BUCKET_SIZE
+    bucketed_y = round(y / CRACK_IDENTIFIER_BUCKET_SIZE) * CRACK_IDENTIFIER_BUCKET_SIZE
+    return f"crack_{bucketed_x}_{bucketed_y}"
 
 
 def _center(crack):
@@ -29,20 +33,19 @@ def _distance(c1, c2):
 
 def link_to_previous_crack(db, bridge_id: int, new_crack: CrackDetection) -> CrackDetection:
     """
-    Try to find the most-recent prior detection of the same physical crack on
-    bridge_id.  If found:
-      - set new_crack.previous_crack_id -> prior detection id
-      - copy prior detection crack_identifier so the whole lineage shares one ID
-
-    Returns new_crack modified in-place (not yet flushed/committed).
+    Find the most-recent prior detection of the same physical crack on bridge_id.
+    If found, link via previous_crack_id and reuse crack_identifier.
+    Otherwise assign a bucketed identifier.
     """
-    prior_detections = (
+    query = (
         db.query(CrackDetection)
         .filter(CrackDetection.bridge_id == bridge_id)
-        .filter(CrackDetection.report_id != new_crack.report_id)   
-        .order_by(CrackDetection.detected_at.desc())
-        .all()
+        .filter(CrackDetection.id != new_crack.id)
     )
+    if new_crack.report_id is not None:
+        query = query.filter(CrackDetection.report_id != new_crack.report_id)
+
+    prior_detections = query.order_by(CrackDetection.detected_at.desc()).all()
 
     best_match = None
     best_dist = float("inf")
@@ -50,12 +53,14 @@ def link_to_previous_crack(db, bridge_id: int, new_crack: CrackDetection) -> Cra
 
     for prior in prior_detections:
         dist = _distance(new_center, _center(prior))
-        if dist < MATCH_DISTANCE_THRESHOLD and dist < best_dist:
+        if dist < CRACK_MATCH_DISTANCE_THRESHOLD and dist < best_dist:
             best_dist = dist
             best_match = prior
 
     if best_match:
         new_crack.previous_crack_id = best_match.id
         new_crack.crack_identifier = best_match.crack_identifier
+    elif not new_crack.crack_identifier:
+        new_crack.crack_identifier = generate_crack_identifier(new_crack.x, new_crack.y)
 
     return new_crack

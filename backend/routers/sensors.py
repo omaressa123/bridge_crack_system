@@ -1,27 +1,41 @@
+import logging
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+
+from auth import get_current_user, verify_jwt_token
 from database import get_db
 from models import SensorData
-from auth import verify_jwt_token
+from schemas import SensorDataResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["sensors"],
 )
 
-# Shared state for WebSockets (for broadcast)
 connected_websockets = []
+
 
 async def broadcast_to_dashboards(payload: dict):
     for ws in list(connected_websockets):
         try:
             await ws.send_json(payload)
         except Exception:
+            logger.warning("Removing disconnected websocket client")
             if ws in connected_websockets:
                 connected_websockets.remove(ws)
 
-@router.get("/sensors/data")
-async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s", db: Session = Depends(get_db)):
+
+@router.get("/sensors/data", response_model=SensorDataResponse)
+async def get_sensor_data(
+    bridge_id: int,
+    limit: int = 7,
+    time_range: str = "30s",
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     if time_range == "30s":
         cutoff_time = datetime.utcnow() - timedelta(seconds=30)
     elif time_range == "1h":
@@ -30,31 +44,32 @@ async def get_sensor_data(bridge_id: int, limit: int = 7, time_range: str = "30s
         cutoff_time = datetime.utcnow() - timedelta(hours=24)
     else:
         cutoff_time = datetime.utcnow() - timedelta(seconds=30)
-    
+
     results = db.query(SensorData).filter(
         SensorData.bridge_id == bridge_id,
-        SensorData.timestamp >= cutoff_time
+        SensorData.timestamp >= cutoff_time,
     ).order_by(
         SensorData.timestamp.desc()
     ).limit(limit).all()
     results = list(reversed(results))
-    
+
     if not results:
         return {
             "temperature_history": [],
             "moisture_history": [],
             "vibration_history": [],
             "strain_history": [],
-            "timestamps": []
+            "timestamps": [],
         }
-    
+
     return {
         "temperature_history": [r.temperature_c for r in results],
         "moisture_history": [r.moisture_percent for r in results],
         "vibration_history": [r.acceleration_x for r in results],
         "strain_history": [r.strain_gauge_value for r in results],
-        "timestamps": [r.timestamp.isoformat() for r in results]
+        "timestamps": [r.timestamp.isoformat() for r in results],
     }
+
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
@@ -66,7 +81,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
     if not payload:
         await websocket.close(code=1008)
         return
-    
+
     connected_websockets.append(websocket)
     try:
         while True:

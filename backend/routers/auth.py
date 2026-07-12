@@ -1,16 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from auth import create_jwt_token, verify_google_token
 from database import get_db
 from models import User
-from auth import verify_google_token, create_jwt_token
-from schemas import GoogleLoginRequest
+from schemas import GoogleLoginRequest, GoogleLoginResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/auth",
     tags=["auth"],
 )
 
-@router.post("/google")
+
+@router.post("/google", response_model=GoogleLoginResponse)
 async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)):
     idinfo = verify_google_token(request.credential)
     if not idinfo:
@@ -31,17 +38,30 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
             full_name=name or "",
             email=email,
             profile_picture=picture,
+            last_login=datetime.utcnow(),
         )
         db.add(user)
         db.commit()
         db.refresh(user)
     else:
+        if user.is_active == 0:
+            raise HTTPException(status_code=403, detail="Account is disabled")
         user.full_name = name or user.full_name
         user.profile_picture = picture
+        user.last_login = datetime.utcnow()
         db.commit()
         db.refresh(user)
 
-    token = create_jwt_token(user.id, email, name, picture)
+    if user.is_active == 0:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    token = create_jwt_token(
+        user.id,
+        email,
+        name or user.full_name,
+        picture or user.profile_picture or "",
+        role=user.role,
+    )
 
     return {
         "token": token,
@@ -51,5 +71,5 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
             "name": user.full_name,
             "picture": user.profile_picture,
             "role": user.role,
-        }
+        },
     }

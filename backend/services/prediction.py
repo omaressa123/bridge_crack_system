@@ -1,66 +1,87 @@
 import os
 import io
-import math
+import logging
 from datetime import datetime, timedelta
-from ultralytics import YOLO
+
 from PIL import Image
 
-CRITICAL_AREA_THRESHOLD = 10500
+from constants import CRITICAL_AREA_THRESHOLD
 
-# Absolute path resolution to find the YOLO model weight relative to this file
-model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../yolo_model/best1.pt"))
-model = YOLO(model_path)
+logger = logging.getLogger(__name__)
+
+_model = None
+
+
+def _get_model():
+    """Lazy-load YOLO model to avoid blocking startup when weights are missing."""
+    global _model
+    if _model is None:
+        from ultralytics import YOLO
+
+        model_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../yolo_model/best1.pt")
+        )
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"YOLO model weights not found at {model_path}")
+        _model = YOLO(model_path)
+        logger.info("YOLO model loaded from %s", model_path)
+    return _model
+
 
 def classify_severity(confidence: float) -> int:
     if confidence > 0.9:
         return 3
-    elif confidence > 0.75:
+    if confidence > 0.75:
         return 2
-    else:
-        return 1
+    return 1
+
 
 def detect_cracks_with_yolo(contents: bytes) -> list[dict]:
     img = Image.open(io.BytesIO(contents))
+    model = _get_model()
     results = model(img)
     cracks = []
-    
+
     for result in results:
         for box in result.boxes:
             x_center, y_center, width, height = box.xywh[0].tolist()
             confidence = float(box.conf[0])
             class_id = int(box.cls[0])
             class_name = model.names[class_id]
-            
-            crack = {
+
+            cracks.append({
                 "x": x_center,
                 "y": y_center,
                 "width": width,
                 "height": height,
                 "confidence": confidence,
                 "severity": classify_severity(confidence),
-                "crack_type": class_name
-            }
-            cracks.append(crack)
+                "crack_type": class_name,
+            })
     return cracks
 
+
 def calculate_crack_growth(current_crack, previous_crack):
-    """Calculate growth metrics between current and previous crack detection"""
+    """Calculate growth metrics between current and previous crack detection."""
     if not previous_crack:
         return None
-    
+
     area_growth = current_crack.area - previous_crack.area
     area_growth_percent = (area_growth / previous_crack.area) * 100 if previous_crack.area > 0 else 0
     width_growth = current_crack.width - previous_crack.width
     height_growth = current_crack.height - previous_crack.height
-    
+
     return {
         "area_growth": area_growth,
         "area_growth_percent": round(area_growth_percent, 2),
         "width_growth": width_growth,
         "height_growth": height_growth,
-        "time_delta_hours": round((current_crack.detected_at - previous_crack.detected_at).total_seconds() / 3600, 2),
-        "grew_significantly": area_growth_percent > 10  # Arbitrary threshold for "significant" growth
+        "time_delta_hours": round(
+            (current_crack.detected_at - previous_crack.detected_at).total_seconds() / 3600, 2
+        ),
+        "grew_significantly": area_growth_percent > 10,
     }
+
 
 def predict_crack_maintenance(history: list, growth_per_day: float) -> dict:
     """

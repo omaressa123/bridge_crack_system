@@ -11,11 +11,6 @@ CAIRO_BRIDGES = [
     {"name": "Imbaba Bridge",        "city": "Cairo", "lat": 30.0771, "lng": 31.2089},
 ]
 
-# Critical area threshold used by predictive maintenance (Feature 2)
-# Matches severity_level=3 boundary: width≈150, height≈70 → area≈10500
-CRITICAL_AREA_THRESHOLD = 10500
-
-
 def init_mock_data():
     db = SessionLocal()
     try:

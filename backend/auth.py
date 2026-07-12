@@ -1,5 +1,6 @@
 import os
 import jwt
+import logging
 from datetime import datetime, timedelta
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -7,61 +8,67 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 
-# Ensure environment variables are loaded
 load_dotenv()
 
-# Configuration
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "393156804705-v60ojlk1pc0cono9crvn56bjumf6sffv.apps.googleusercontent.com")
-JWT_SECRET = os.getenv("JWT_SECRET", "bridge-crack-detection-secret-key-xyz")
+logger = logging.getLogger(__name__)
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+
+if not GOOGLE_CLIENT_ID:
+    logger.warning("GOOGLE_CLIENT_ID is not set — Google login will fail")
+if not JWT_SECRET:
+    logger.warning("JWT_SECRET is not set — JWT operations will fail")
 
 security = HTTPBearer()
 
+
 def verify_google_token(token: str) -> dict | None:
-    """
-    Verifies a Google ID token (credential) sent from the frontend.
-    Returns the parsed user info dictionary if valid, else None.
-    """
+    """Verify a Google ID token sent from the frontend."""
+    if not GOOGLE_CLIENT_ID:
+        return None
     try:
         idinfo = id_token.verify_oauth2_token(token, requests.Request(), GOOGLE_CLIENT_ID)
         return idinfo
     except ValueError as e:
-        print(f"Google ID Token verification failed: {str(e)}")
+        logger.warning("Google ID token verification failed: %s", e)
         return None
 
-def create_jwt_token(user_id: int, email: str, name: str, picture: str) -> str:
-    """
-    Creates a project-specific JWT signed with our JWT_SECRET.
-    """
+
+def create_jwt_token(user_id: int, email: str, name: str, picture: str, role: str | None = None) -> str:
+    """Create a project-specific JWT signed with JWT_SECRET."""
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is not configured")
+
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
         "email": email,
         "name": name,
         "picture": picture,
+        "role": role or "Bridge Engineer",
         "exp": expire,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+
 def verify_jwt_token(token: str) -> dict | None:
-    """
-    Verifies a project-specific JWT.
-    Returns the decoded payload dictionary if valid, else None.
-    """
+    """Verify a project-specific JWT."""
+    if not JWT_SECRET:
+        return None
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.PyJWTError as e:
-        print(f"JWT validation failed: {str(e)}")
+        logger.warning("JWT validation failed: %s", e)
         return None
 
+
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """
-    FastAPI dependency to secure HTTP endpoints.
-    Verifies the Authorization Bearer JWT.
-    """
+    """FastAPI dependency to secure HTTP endpoints."""
     token = credentials.credentials
     payload = verify_jwt_token(token)
     if not payload:
@@ -71,3 +78,13 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
     return payload
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """Require ADMIN role for protected admin endpoints."""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

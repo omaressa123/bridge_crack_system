@@ -62,6 +62,8 @@ class InspectionReport(Base):
         back_populates="report",
         cascade="all, delete-orphan"
     )
+    bridge = relationship("Bridge", back_populates="reports")
+    creator = relationship("User", back_populates="reports")
 
 class User(Base):
     __tablename__ = "users"
@@ -74,4 +76,4 @@ class User(Base):
     is_active = Column(Integer, nullable=True, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
-    reports = relationship("InspectionReport")
+    reports = relationship("InspectionReport", back_populates="creator")
