@@ -1,5 +1,6 @@
 from database import SessionLocal, init_db
 from models import Bridge, CrackDetection, SensorData, InspectionReport
+from crack_linking import generate_crack_identifier
 from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────────
@@ -20,7 +21,7 @@ def init_mock_data():
             bridge = Bridge(
                 bridge_name=b["name"],
                 city=b["city"],
-                inspection_date=datetime.now(),
+                inspection_date=datetime.utcnow(),
                 latitude=b["lat"],
                 longitude=b["lng"],
             )
@@ -40,21 +41,24 @@ def init_mock_data():
                 moisture_percent=45 + i,
                 acceleration_x=0.8 + (i * 0.01),
                 strain_gauge_value=120 + i,
-                timestamp=datetime.now() - timedelta(days=6 - i)
+                timestamp=datetime.utcnow() - timedelta(days=6 - i)
             ))
 
         # ── 3. Generic cracks for primary bridge ───────────────────────────
         for i in range(12):
+            x = 100 + i * 50
+            y = 100 + i * 30
             db.add(CrackDetection(
                 bridge_id=primary_bridge.id,
-                x=100 + i * 50,
-                y=100 + i * 30,
+                x=x,
+                y=y,
                 width=50 + i * 10,
                 height=20 + i * 5,
                 area=(50 + i * 10) * (20 + i * 5),
                 confidence=0.6 + i * 0.03,
                 severity_level=1 if i < 7 else 2 if i < 10 else 3,
                 crack_type="hairline" if i < 10 else "structural",
+                crack_identifier=generate_crack_identifier(x, y),
             ))
 
         db.commit()
@@ -71,7 +75,7 @@ def init_mock_data():
             crack_type="hairline",
             crack_identifier=LINEAGE_ID,
             previous_crack_id=None,
-            detected_at=datetime.now() - timedelta(days=21),
+            detected_at=datetime.utcnow() - timedelta(days=21),
         )
         db.add(detection_1)
         db.flush()  # get detection_1.id
@@ -84,7 +88,7 @@ def init_mock_data():
             crack_type="hairline",
             crack_identifier=LINEAGE_ID,
             previous_crack_id=detection_1.id,
-            detected_at=datetime.now() - timedelta(days=10),
+            detected_at=datetime.utcnow() - timedelta(days=10),
         )
         db.add(detection_2)
         db.flush()
@@ -97,7 +101,7 @@ def init_mock_data():
             crack_type="structural",
             crack_identifier=LINEAGE_ID,
             previous_crack_id=detection_2.id,
-            detected_at=datetime.now(),
+            detected_at=datetime.utcnow(),
         )
         db.add(detection_3)
 
@@ -128,9 +132,10 @@ def init_mock_data():
         # ── 7. Inspection report ───────────────────────────────────────────
         db.add(InspectionReport(
             bridge_id=primary_bridge.id,
-            report_date=datetime.now(),
+            report_date=datetime.utcnow(),
             total_cracks_detected=15,
             high_severity_cracks=2,
+            status="Completed",
         ))
 
         db.commit()

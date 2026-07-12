@@ -44,7 +44,7 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
         db.commit()
         db.refresh(user)
     else:
-        if user.is_active == 0:
+        if not user.is_active:
             raise HTTPException(status_code=403, detail="Account is disabled")
         user.full_name = name or user.full_name
         user.profile_picture = picture
@@ -52,7 +52,7 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
         db.commit()
         db.refresh(user)
 
-    if user.is_active == 0:
+    if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
     token = create_jwt_token(
