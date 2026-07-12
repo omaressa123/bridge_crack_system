@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { authenticatedFetch, API_URL } from '../api';
 
-// Severity → colour mapping using existing CSS variable palette
+// Helper to handle Leaflet invalidation size when rendered dynamically/tabs
+function MapInvalidateSize() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
+// Severity → colour mapping matching application-wide CSS variable palette
 const SEVERITY_COLORS = {
-  0: '#38a169', // no cracks → green
-  1: '#38a169', // low → green
-  2: '#dd6b20', // medium → orange
-  3: '#e53e3e', // high → red
+  0: '#10B981', // no cracks → green (success)
+  1: '#10B981', // low → green (success)
+  2: '#F59E0B', // medium → orange (warning)
+  3: '#EF4444', // high → red (danger)
 };
 
 const SEVERITY_LABELS = {
@@ -104,20 +116,21 @@ export default function BridgeMap({ language }) {
       </div>
 
       {/* Map */}
-      <div style={{ height: 380, borderRadius: '0 0 12px 12px', overflow: 'hidden' }}>
+      <div style={{ height: 380, borderRadius: '0 0 12px 12px', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
         <MapContainer
           center={mapCenter}
           zoom={13}
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom={false}
         >
+          <MapInvalidateSize />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
           {bridges
-            .filter(b => b.latitude && b.longitude)
+            .filter(b => b.latitude !== null && b.latitude !== undefined && b.longitude !== null && b.longitude !== undefined)
             .map(bridge => {
               const color = SEVERITY_COLORS[bridge.max_severity] || SEVERITY_COLORS[0];
               const sevLabel = SEVERITY_LABELS[language]?.[bridge.max_severity]

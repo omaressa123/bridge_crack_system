@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
 from sqlalchemy.orm import Session
 
 from deps import get_bridge_or_404, get_current_active_user
