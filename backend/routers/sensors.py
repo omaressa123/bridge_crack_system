@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from sqlalchemy.orm import Session
 
 from auth import verify_jwt_token
-from database import get_db
+from database import get_db, SessionLocal
 from deps import get_current_active_user
-from models import Bridge, SensorData
+from models import Bridge, SensorData, User
 from schemas import SensorDataResponse, SensorTimeRange
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,6 @@ async def get_sensor_data(
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = None):
-    await websocket.accept()
     if not token:
         await websocket.close(code=1008)
         return
@@ -85,6 +84,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = None):
     if not payload:
         await websocket.close(code=1008)
         return
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == int(payload["sub"])).first()
+        if not user or not user.is_active:
+            await websocket.close(code=1008)
+            return
+    finally:
+        db.close()
+
+    await websocket.accept()
 
     connected_websockets.append(websocket)
     try:

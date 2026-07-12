@@ -4,8 +4,10 @@ import os
 
 import paho.mqtt.client as mqtt
 
+from datetime import datetime
+
 from database import SessionLocal
-from models import SensorData
+from models import SensorData, SensorDevice
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,24 @@ def start_mqtt_listener(active_websockets, broadcast_fn):
                 strain_gauge_value=payload.get("strain"),
             )
             db.add(reading)
+
+            device_id = payload.get("device_id") or f"bridge_{bridge_id}_sensor"
+            device = db.query(SensorDevice).filter(SensorDevice.device_id == device_id).first()
+            if not device:
+                device = SensorDevice(
+                    bridge_id=bridge_id,
+                    device_id=device_id,
+                    mqtt_topic=msg.topic,
+                    status="connected",
+                )
+                db.add(device)
+            else:
+                device.status = "connected"
+                device.last_seen = datetime.utcnow()
+                device.mqtt_topic = msg.topic
+                device.battery_level = payload.get("battery")
+                device.signal_strength = payload.get("signal")
+
             db.commit()
         except Exception:
             db.rollback()

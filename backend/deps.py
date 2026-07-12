@@ -34,6 +34,26 @@ def get_current_active_user(
     }
 
 
+def get_current_admin_user(
+    db: Session = Depends(get_db),
+    token_user: dict = Depends(get_current_user),
+) -> User:
+    """Require ADMIN role and return the database user."""
+    if token_user.get("role") != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    user_id = int(token_user["sub"])
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin account is disabled or not found",
+        )
+    return user
+
+
 def get_bridge_or_404(bridge_id: int, db: Session = Depends(get_db)) -> Bridge:
     bridge = db.query(Bridge).filter(Bridge.id == bridge_id).first()
     if not bridge:

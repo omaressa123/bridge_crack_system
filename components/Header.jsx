@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Header({ language, setLanguage, t, isConnected, bridges, bridgeId, setBridgeId, user, onSignOut }) {
+export default function Header({ language, setLanguage, t, isConnected, bridges, bridgeId, setBridgeId, user, onSignOut, onOpenAdmin }) {
   return (
     <header className="app-header">
       <div className="header-content">
@@ -26,6 +26,11 @@ export default function Header({ language, setLanguage, t, isConnected, bridges,
         </div>
         
         <div className="header-right">
+          {onOpenAdmin && (
+            <button className="language-btn admin-entry-btn" onClick={onOpenAdmin} type="button">
+              {language === 'en' ? '⚙ Admin' : '⚙ الإدارة'}
+            </button>
+          )}
           {user && (
             <div className="user-profile">
               <img src={user.picture} alt={user.name} className="user-avatar" referrerPolicy="no-referrer" />

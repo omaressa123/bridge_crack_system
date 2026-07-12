@@ -8,6 +8,7 @@ import Header from './components/Header';
 import Navigation from './components/Navigation';
 import Login from './components/Login';
 import BridgeMap from './components/BridgeMap';
+import AdminApp from './admin/AdminApp';
 import { authenticatedFetch, API_URL } from './api';
 
 
@@ -19,6 +20,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   // Fetch bridges from backend on load
   useEffect(() => {
@@ -122,6 +124,15 @@ export default function App() {
     );
   }
 
+  if (showAdmin) {
+    return (
+      <AdminApp
+        user={user}
+        onExit={() => setShowAdmin(false)}
+      />
+    );
+  }
+
   return (
     <div className={`app ${language === 'ar' ? 'rtl' : 'ltr'}`}>
       <Header 
@@ -139,6 +150,7 @@ export default function App() {
           setToken(null);
           setUser(null);
         }}
+        onOpenAdmin={user?.role === 'ADMIN' ? () => setShowAdmin(true) : undefined}
       />
       
       <div className="app-container">

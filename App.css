@@ -101,6 +101,16 @@ body {
   transform: translateY(-2px);
 }
 
+.admin-entry-btn {
+  margin-right: 8px;
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10B981;
+}
+
+.admin-entry-btn:hover {
+  background: rgba(16, 185, 129, 0.4);
+}
+
 /* ==================== MAIN CONTENT ==================== */
 .app-container {
   flex: 1;

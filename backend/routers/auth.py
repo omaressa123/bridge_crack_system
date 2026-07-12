@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,8 @@ from models import User
 from schemas import GoogleLoginRequest, GoogleLoginResponse
 
 logger = logging.getLogger(__name__)
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
 
 router = APIRouter(
     prefix="/api/auth",
@@ -33,11 +36,13 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
 
     user = db.query(User).filter(User.google_id == google_sub).first()
     if not user:
+        role = "ADMIN" if email.lower() == ADMIN_EMAIL and ADMIN_EMAIL else "Bridge Engineer"
         user = User(
             google_id=google_sub,
             full_name=name or "",
             email=email,
             profile_picture=picture,
+            role=role,
             last_login=datetime.utcnow(),
         )
         db.add(user)
@@ -46,6 +51,8 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
     else:
         if not user.is_active:
             raise HTTPException(status_code=403, detail="Account is disabled")
+        if ADMIN_EMAIL and email.lower() == ADMIN_EMAIL:
+            user.role = "ADMIN"
         user.full_name = name or user.full_name
         user.profile_picture = picture
         user.last_login = datetime.utcnow()

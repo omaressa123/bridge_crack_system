@@ -51,6 +51,10 @@ def run_migrations(engine: Engine) -> None:
                 conn.execute(text("UPDATE `bridges` SET `updated_at` = `created_at` WHERE `updated_at` IS NULL"))
             if not _column_exists(inspector, "bridges", "image_path"):
                 _add_column(conn, "bridges", "image_path", "VARCHAR(500) NULL")
+            if not _column_exists(inspector, "bridges", "inspection_schedule"):
+                _add_column(conn, "bridges", "inspection_schedule", "VARCHAR(255) NULL")
+            if not _column_exists(inspector, "bridges", "metadata_json"):
+                _add_column(conn, "bridges", "metadata_json", "TEXT NULL")
 
         if _table_exists(inspector, "inspection_reports"):
             if not _column_exists(inspector, "inspection_reports", "created_at"):
@@ -73,6 +77,14 @@ def run_migrations(engine: Engine) -> None:
         if _table_exists(inspector, "crack_detections"):
             _backfill_nulls(conn, "crack_detections", "severity_level", "1")
             _backfill_nulls(conn, "crack_detections", "crack_type", "'unknown'")
+            if not _column_exists(inspector, "crack_detections", "status"):
+                _add_column(conn, "crack_detections", "status", "VARCHAR(30) NOT NULL DEFAULT 'pending'")
+            if not _column_exists(inspector, "crack_detections", "notes"):
+                _add_column(conn, "crack_detections", "notes", "TEXT NULL")
+            if not _column_exists(inspector, "crack_detections", "reviewed_by"):
+                _add_column(conn, "crack_detections", "reviewed_by", "INT NULL")
+            if not _column_exists(inspector, "crack_detections", "reviewed_at"):
+                _add_column(conn, "crack_detections", "reviewed_at", "DATETIME NULL")
 
         # Indexes (idempotent checks)
         index_specs = [

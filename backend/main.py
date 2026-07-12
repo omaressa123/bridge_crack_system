@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 
 from database import init_db
 from logging_config import setup_logging
-from routers import auth, bridges, cracks, reports, sensors
+from routers import auth, bridges, cracks, reports, sensors, admin
+from middleware.security import RateLimitMiddleware
 from services.mqtt import start_mqtt_listener
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ app = FastAPI(
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 allow_origins = [origin.strip() for origin in _cors_origins.split(",") if origin.strip()]
 
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
@@ -57,6 +59,7 @@ app.include_router(bridges.router)
 app.include_router(cracks.router)
 app.include_router(reports.router)
 app.include_router(sensors.router)
+app.include_router(admin.router)
 
 
 @app.exception_handler(HTTPException)

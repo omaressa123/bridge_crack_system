@@ -140,6 +140,35 @@ def init_mock_data():
 
         db.commit()
         print("✅ Mock data (including crack lineage + bridge coordinates) added successfully!")
+
+        # ── 8. Admin user seed (for demo — first Google login can be promoted) ──
+        from models import User, SensorDevice, SystemSetting
+        admin = db.query(User).filter(User.role == "ADMIN").first()
+        if not admin:
+            admin = User(
+                google_id="admin-seed-demo",
+                full_name="System Admin",
+                email="admin@bridge-crack.local",
+                role="ADMIN",
+                is_active=True,
+            )
+            db.add(admin)
+
+        for bridge in bridge_objs:
+            device_id = f"bridge_{bridge.id}_sensor"
+            if not db.query(SensorDevice).filter(SensorDevice.device_id == device_id).first():
+                db.add(SensorDevice(
+                    bridge_id=bridge.id,
+                    device_id=device_id,
+                    mqtt_topic=f"sensors/bridge_{bridge.id}/data",
+                    status="disconnected",
+                ))
+
+        if not db.query(SystemSetting).filter(SystemSetting.key == "retrain_threshold").first():
+            db.add(SystemSetting(key="retrain_threshold", value="100"))
+
+        db.commit()
+        print("✅ Admin seed data (admin user, sensors, settings) added!")
     except Exception as e:
         db.rollback()
         print(f"Error adding mock data: {e}")
