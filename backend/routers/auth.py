@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from auth import create_jwt_token, verify_google_token
+from auth import create_jwt_token, is_admin_role, verify_google_token
 from database import get_db
 from models import User
 from schemas import GoogleLoginRequest, GoogleLoginResponse
@@ -52,6 +52,8 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
         if not user.is_active:
             raise HTTPException(status_code=403, detail="Account is disabled")
         if ADMIN_EMAIL and email.lower() == ADMIN_EMAIL:
+            user.role = "Admin"
+        elif is_admin_role(user.role):
             user.role = "Admin"
         user.full_name = name or user.full_name
         user.profile_picture = picture

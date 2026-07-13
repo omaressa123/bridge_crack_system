@@ -25,6 +25,11 @@ if not JWT_SECRET:
 security = HTTPBearer()
 
 
+def is_admin_role(role: str | None) -> bool:
+    """True for ADMIN and legacy Admin values."""
+    return bool(role and role.strip().upper() == "ADMIN")
+
+
 def verify_google_token(token: str) -> dict | None:
     """Verify a Google ID token sent from the frontend."""
     if not GOOGLE_CLIENT_ID:
@@ -82,7 +87,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     """Require Admin role for protected admin endpoints."""
-    if current_user.get("role") != "Admin":
+    if not is_admin_role(current_user.get("role")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

@@ -36,7 +36,7 @@ export default function AdminApp({ user, onExit }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'Admin' && user?.role !== 'ADMIN') {
       setAuthorized(false);
       return;
     }
@@ -63,7 +63,7 @@ export default function AdminApp({ user, onExit }) {
     return (
       <div className="admin-denied">
         <h2>Access Denied</h2>
-        <p>Only ADMIN users can access the control panel.</p>
+        <p>Only Admin users can access the control panel.</p>
         <ErrorBanner message={error} />
         <button type="button" className="admin-btn" onClick={onExit}>← Back</button>
       </div>

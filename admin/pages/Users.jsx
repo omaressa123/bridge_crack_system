@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { adminApi } from '../api/adminApi';
 import { DataTable, ErrorBanner, LoadingSpinner, Modal } from '../components/AdminUI';
 
-const ROLES = ['ADMIN', 'Bridge Engineer', 'Inspector', 'Viewer'];
+const ROLES = ['Admin', 'Bridge Engineer', 'Inspector', 'Viewer'];
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);

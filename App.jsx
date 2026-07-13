@@ -150,7 +150,7 @@ console.log(currentTab);
           setToken(null);
           setUser(null);
         }}
-        onOpenAdmin={user?.role === 'ADMIN' ? () => setShowAdmin(true) : undefined}
+        onOpenAdmin={user?.role === 'Admin' || user?.role === 'ADMIN' ? () => setShowAdmin(true) : undefined}
       />
       
       <div className="app-container">

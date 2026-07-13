@@ -143,13 +143,13 @@ def init_mock_data():
 
         # ── 8. Admin user seed (for demo — first Google login can be promoted) ──
         from models import User, SensorDevice, SystemSetting
-        admin = db.query(User).filter(User.role == "ADMIN").first()
+        admin = db.query(User).filter(User.role == "Admin").first()
         if not admin:
             admin = User(
                 google_id="admin-seed-demo",
                 full_name="System Admin",
                 email="admin@bridge-crack.local",
-                role="ADMIN",
+                role="Admin",
                 is_active=True,
             )
             db.add(admin)

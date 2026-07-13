@@ -3,7 +3,7 @@
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from auth import get_current_user
+from auth import get_current_user, is_admin_role
 from database import get_db
 from models import Bridge, User
 
@@ -39,17 +39,17 @@ def get_current_admin_user(
     token_user: dict = Depends(get_current_user),
 ) -> User:
     """Require Admin role and return the database user."""
-    if token_user.get("role") != "Admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
     user_id = int(token_user["sub"])
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin account is disabled or not found",
+        )
+    if not is_admin_role(user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
         )
     return user
 
