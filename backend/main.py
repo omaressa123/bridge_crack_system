@@ -6,7 +6,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
 from database import init_db
 from logging_config import setup_logging
 from routers import auth, bridges, cracks, reports, sensors, admin
