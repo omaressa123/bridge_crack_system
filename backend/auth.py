@@ -81,8 +81,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    """Require ADMIN role for protected admin endpoints."""
-    if current_user.get("role") != "ADMIN":
+    """Require Admin role for protected admin endpoints."""
+    if current_user.get("role") != "Admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

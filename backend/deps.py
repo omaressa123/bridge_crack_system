@@ -38,8 +38,8 @@ def get_current_admin_user(
     db: Session = Depends(get_db),
     token_user: dict = Depends(get_current_user),
 ) -> User:
-    """Require ADMIN role and return the database user."""
-    if token_user.get("role") != "ADMIN":
+    """Require Admin role and return the database user."""
+    if token_user.get("role") != "Admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

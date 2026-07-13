@@ -132,7 +132,7 @@ export default function App() {
       />
     );
   }
-
+console.log(currentTab);
   return (
     <div className={`app ${language === 'ar' ? 'rtl' : 'ltr'}`}>
       <Header 

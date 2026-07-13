@@ -61,18 +61,30 @@ export default function BridgeMap({ language }) {
     severity: 'Risk level', rec: 'Recommendation', loading: 'Loading map data…',
   };
 
-  useEffect(() => {
-    authenticatedFetch(`${API_URL}/bridges/map`)
-      .then(r => r.json())
-      .then(data => {
-        setBridges(data.bridges || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+useEffect(() => {
+  const loadData = async () => {
+    try {
+      const response = await authenticatedFetch(`${API_URL}/bridges/map`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      console.log("Map API:", data);
+
+      setBridges(data.bridges || []);
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadData();
+}, []);
 
   if (loading) {
     return (

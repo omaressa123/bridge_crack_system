@@ -36,7 +36,7 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
 
     user = db.query(User).filter(User.google_id == google_sub).first()
     if not user:
-        role = "ADMIN" if email.lower() == ADMIN_EMAIL and ADMIN_EMAIL else "Bridge Engineer"
+        role = "Admin" if email.lower() == ADMIN_EMAIL and ADMIN_EMAIL else "Bridge Engineer"
         user = User(
             google_id=google_sub,
             full_name=name or "",
@@ -52,7 +52,7 @@ async def google_auth(request: GoogleLoginRequest, db: Session = Depends(get_db)
         if not user.is_active:
             raise HTTPException(status_code=403, detail="Account is disabled")
         if ADMIN_EMAIL and email.lower() == ADMIN_EMAIL:
-            user.role = "ADMIN"
+            user.role = "Admin"
         user.full_name = name or user.full_name
         user.profile_picture = picture
         user.last_login = datetime.utcnow()
